@@ -7,10 +7,10 @@
 
 We build and evaluate a machine-learning pipeline that classifies the sentiment
 of user-reported software issues into **negative**, **neutral** and **positive**.
-The study compares **three text-vectorisation strategies** (Bag-of-Words, TF-IDF,
-Word2Vec — plus an optional BERT path) against **five classifiers** (Naive Bayes,
-Decision Tree, Random Forest, AdaBoost, Logistic Regression), each
-hyper-parameter-tuned with 5-fold cross-validation. We then study, in dedicated
+The study compares **four text-vectorisation strategies** (Bag-of-Words, TF-IDF,
+corpus-trained Word2Vec, pre-trained GloVe — plus an optional BERT path) against
+**five classifiers** (Naive Bayes, Decision Tree, Random Forest, AdaBoost,
+Logistic Regression), each hyper-parameter-tuned with 5-fold cross-validation. We then study, in dedicated
 experiments, class-imbalance handling, dimensionality reduction, decision-tree
 pruning and early stopping.
 
@@ -84,12 +84,17 @@ Lower-casing → URL/HTML/punctuation stripping → tokenisation → stop-word r
 | **Bag-of-Words** | n-gram counts (1–2-grams, ≤5 000 features) | sparse, non-negative |
 | **TF-IDF** | counts re-weighted by inverse document frequency, sublinear TF | sparse, non-negative |
 | **Word2Vec** | mean of 100-d embeddings trained on the training corpus | dense |
+| **GloVe** *(pre-trained)* | mean of 100-d Wikipedia+Gigaword vectors (400 k vocab) | dense |
 | **BERT** *(optional)* | mean-pooled contextual embeddings | requires `transformers`+`torch` |
+
+GloVe gives us a genuinely **pre-trained** embedding (loaded via gensim-data); the
+same vectoriser switches to the canonical 300-d Google-News *word2vec* vectors by
+changing one argument.
 
 > **BERT** is implemented in full (`BertVectorizer`) but needs the optional
 > deep-learning stack and network access to the model hub. Where those are
 > unavailable it is skipped automatically and the experiments use BoW / TF-IDF /
-> Word2Vec.
+> Word2Vec / GloVe.
 
 ### 3.3 Classifiers ([`src/models.py`](../src/models.py))
 
@@ -109,8 +114,8 @@ equally), and confusion matrices. Macro-F1 is the tuning target.
   is exactly equivalent to running it inside every CV fold — but far cheaper.
 - **Cache vectorisers** (`joblib.Memory`) against one fixed `StratifiedKFold`, so
   the expensive Word2Vec / TF-IDF fits are computed once per fold and reused across
-  every hyper-parameter combination and classifier. The full study runs in ~130 s
-  on 4 cores.
+  every hyper-parameter combination and classifier. The full study (4 vectorisers
+  × 5 classifiers + the four ablations) runs in ~4–5 min on 4 cores.
 
 ---
 
@@ -133,18 +138,23 @@ Test-set results (held-out 20 %), sorted by macro-F1:
 | 1 | TF-IDF | **Naive Bayes** | 0.850 | 0.898 | 0.900 | 0.864 | **0.880** |
 | 2 | TF-IDF | Logistic Regression | 0.843 | 0.895 | 0.903 | 0.858 | 0.877 |
 | 3 | BoW | Logistic Regression | 0.841 | 0.895 | 0.901 | 0.854 | 0.874 |
-| 4 | BoW | Naive Bayes | 0.835 | 0.877 | 0.853 | 0.852 | 0.852 |
-| 5 | BoW | Random Forest | 0.832 | 0.873 | 0.876 | 0.832 | 0.850 |
-| 6 | Word2Vec | Random Forest | 0.810 | 0.870 | 0.867 | 0.835 | 0.849 |
-| 7 | TF-IDF | Decision Tree | 0.802 | 0.870 | 0.871 | 0.832 | 0.849 |
-| 8 | TF-IDF | Random Forest | 0.825 | 0.867 | 0.864 | 0.834 | 0.847 |
-| 9 | BoW | Decision Tree | 0.814 | 0.867 | 0.869 | 0.828 | 0.845 |
-| 10 | Word2Vec | Logistic Regression | 0.827 | 0.868 | 0.856 | 0.836 | 0.845 |
-| 11 | Word2Vec | AdaBoost | 0.787 | 0.860 | 0.849 | 0.826 | 0.836 |
-| 12 | Word2Vec | Naive Bayes | 0.775 | 0.838 | 0.803 | 0.824 | 0.811 |
-| 13 | Word2Vec | Decision Tree | 0.737 | 0.795 | 0.763 | 0.750 | 0.756 |
-| 14 | BoW | AdaBoost | 0.606 | 0.742 | 0.835 | 0.601 | 0.628 |
-| 15 | TF-IDF | AdaBoost | 0.610 | 0.733 | 0.826 | 0.589 | 0.612 |
+| 4 | GloVe | Logistic Regression | 0.827 | 0.878 | 0.875 | 0.840 | 0.856 |
+| 5 | BoW | Naive Bayes | 0.835 | 0.877 | 0.853 | 0.852 | 0.852 |
+| 6 | BoW | Random Forest | 0.832 | 0.873 | 0.876 | 0.832 | 0.850 |
+| 7 | Word2Vec | Random Forest | 0.810 | 0.870 | 0.867 | 0.835 | 0.849 |
+| 8 | TF-IDF | Decision Tree | 0.802 | 0.870 | 0.871 | 0.832 | 0.849 |
+| 9 | TF-IDF | Random Forest | 0.825 | 0.867 | 0.864 | 0.834 | 0.847 |
+| 10 | BoW | Decision Tree | 0.814 | 0.867 | 0.869 | 0.828 | 0.845 |
+| 11 | Word2Vec | Logistic Regression | 0.827 | 0.868 | 0.856 | 0.836 | 0.845 |
+| 12 | Word2Vec | AdaBoost | 0.787 | 0.860 | 0.849 | 0.826 | 0.836 |
+| 13 | Word2Vec | Naive Bayes | 0.775 | 0.838 | 0.803 | 0.824 | 0.811 |
+| 14 | Word2Vec | Decision Tree | 0.737 | 0.795 | 0.763 | 0.750 | 0.756 |
+| 15 | GloVe | AdaBoost | 0.701 | 0.788 | 0.771 | 0.723 | 0.740 |
+| 16 | GloVe | Naive Bayes | 0.705 | 0.765 | 0.724 | 0.748 | 0.732 |
+| 17 | GloVe | Random Forest | 0.680 | 0.790 | 0.826 | 0.680 | 0.711 |
+| 18 | BoW | AdaBoost | 0.606 | 0.742 | 0.835 | 0.601 | 0.628 |
+| 19 | TF-IDF | AdaBoost | 0.610 | 0.733 | 0.826 | 0.589 | 0.612 |
+| 20 | GloVe | Decision Tree | 0.572 | 0.665 | 0.602 | 0.597 | 0.600 |
 
 ![Macro-F1 comparison](../results/figures/comparison_f1.png)
 
@@ -166,6 +176,12 @@ Confusion matrix of the best model (TF-IDF + Naive Bayes):
 - **Word2Vec trails the sparse methods** (≈ 0.81–0.85): embeddings trained on a
   small in-domain corpus blur the precise lexical cues that TF-IDF preserves, but
   they make tree/boosting models behave far better (dense, low-dimensional).
+- **Pre-trained GloVe splits sharply by classifier.** With Logistic Regression it
+  is excellent (0.856, 4th overall) — a smooth, dense space is ideal for a linear
+  model — but with trees / NB it is the weakest family (Decision Tree 0.600,
+  *last*). General-domain Wikipedia vectors are also a slightly worse fit than the
+  *in-domain* corpus-trained Word2Vec for every classifier except the linear one,
+  a nice illustration that "pre-trained" is not automatically "better".
 
 ---
 
@@ -272,15 +288,18 @@ would bring. (The SVD reduction from §7 is what makes boosting on text efficien
 | Multinomial vs Gaussian NB by feature type | NB assumptions must match the data | none (handled automatically) |
 | Logistic Regression with L2 | strong, robust, regularised baseline | linear decision boundary |
 | TruncatedSVD not PCA | avoids densifying sparse TF-IDF | loses exact feature interpretability |
+| Pre-trained GloVe + linear model | dense smooth space suits Logistic Regression (0.856) | poor for trees; weaker than in-domain Word2Vec elsewhere |
 | Macro-F1 as the metric | weights minority classes equally on an imbalanced problem | hides raw accuracy (reported alongside) |
 | Resampling inside `imblearn` pipeline | prevents leakage of synthetic samples into validation | extra pipeline plumbing |
-| Preprocess once + cache vectorisers | ~130 s for the whole study | a few hundred MB of disk cache |
+| Preprocess once + cache vectorisers | whole study in a couple of minutes | a few hundred MB of disk cache |
 
 **Headline findings.** (1) Simple linear / probabilistic models on TF-IDF are the
 sweet spot for short issue text. (2) Boosting needs dense, low-dimensional features
-to work — never raw sparse n-grams. (3) Resampling trades majority recall for
-minority recall rather than improving everything at once. (4) Both pruning and
-early stopping convincingly curb over-fitting.
+to work — never raw sparse n-grams. (3) **Pre-trained embeddings (GloVe) help only
+the linear model**; in-domain Word2Vec and TF-IDF win everywhere else. (4)
+Resampling trades majority recall for minority recall rather than improving
+everything at once. (5) Both pruning and early stopping convincingly curb
+over-fitting.
 
 ---
 
@@ -292,11 +311,11 @@ early stopping convincingly curb over-fitting.
   than saturated at a single score.
 - **MultinomialNB rejects negative features** → automatic switch to GaussianNB for
   dense embeddings / reduced features.
-- **Run-time of nested tuning** across 15 vectoriser×model combinations →
+- **Run-time of nested tuning** across 20 vectoriser×model combinations →
   solved with stateless-preprocessing-once + a shared `joblib` vectoriser cache.
 - **BERT weights unreachable** behind the network policy → a complete BERT
-  vectoriser is provided but gracefully skipped, with the other three vectorisers
-  carrying the comparison.
+  vectoriser is provided but gracefully skipped, with the other four vectorisers
+  (BoW, TF-IDF, Word2Vec, pre-trained GloVe) carrying the comparison.
 
 ---
 
@@ -316,7 +335,7 @@ early stopping convincingly curb over-fitting.
 
 ```bash
 pip install -r requirements.txt
-python main.py            # full study (~130 s on 4 cores), writes results/
+python main.py            # full study (~4–5 min on 4 cores), writes results/
 ```
 
 Every figure and table in this report is regenerated under

@@ -50,7 +50,7 @@ from src.evaluation import (
     plot_model_comparison,
 )
 from src.preprocessing import TextPreprocessor
-from src.vectorization import VECTORIZERS, bert_available, make_tfidf
+from src.vectorization import VECTORIZERS, bert_available, make_tfidf, pretrained_available
 
 # Shared, fixed CV splitter -> identical folds across every search, which is
 # what makes the joblib vectoriser cache effective.
@@ -166,8 +166,13 @@ def run_main_comparison(save_models: bool = False) -> pd.DataFrame:
     X_train, X_test, y_train, y_test, df = prepare_data()
     run_eda(df)
 
-    # BERT is included only if its optional dependencies are importable.
-    vec_names = ["BoW", "TF-IDF", "Word2Vec"] + (["BERT"] if bert_available() else [])
+    # Pre-trained GloVe is included if the vectors can be loaded (downloaded once
+    # via gensim-data); BERT only if its optional deep-learning stack is present.
+    vec_names = ["BoW", "TF-IDF", "Word2Vec"]
+    if pretrained_available():
+        vec_names.append("GloVe")
+    if bert_available():
+        vec_names.append("BERT")
 
     all_rows = []
     for vec_name in vec_names:

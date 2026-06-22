@@ -22,7 +22,7 @@ pip install -r requirements.txt
 python scripts/generate_dataset.py     # (re)generate the cached corpus
 python scripts/explore_data.py          # summary stats + EDA figures
 
-# 3. Run the whole study end to end (~2 minutes on 4 cores)
+# 3. Run the whole study end to end (~4-5 minutes on 4 cores)
 python main.py                          # add --fast to skip the slowest extra
 ```
 
@@ -75,7 +75,7 @@ raw text
    ▼  clean → tokenise → drop stop-words (keep negations) → WordNet lemmatise
 cleaned text
    │  src/vectorization.py
-   ▼  Bag-of-Words │ TF-IDF │ Word2Vec │ BERT (optional)
+   ▼  Bag-of-Words │ TF-IDF │ Word2Vec │ GloVe (pre-trained) │ BERT (optional)
 feature matrix
    │  src/balancing.py        (SMOTE / under-sampling, train folds only)
    │  TruncatedSVD            (PCA-equivalent reduction, optional)
@@ -108,7 +108,7 @@ metrics + confusion matrices + figures
 | Brief requirement | Where |
 |---|---|
 | Cleaning, lemmatisation, stop-words | `src/preprocessing.py` |
-| BoW, TF-IDF, Word2Vec, BERT | `src/vectorization.py` |
+| BoW, TF-IDF, Word2Vec, GloVe (pre-trained), BERT | `src/vectorization.py` |
 | SMOTE / under-sampling | `src/balancing.py`, `experiment_imbalance` |
 | ≥3 classifiers (NB, Decision Tree, ensembles) | `src/models.py` |
 | 5-fold cross-validation + GridSearchCV tuning | `src/experiment.py` |
@@ -120,8 +120,8 @@ metrics + confusion matrices + figures
 
 > **BERT note.** A complete, documented `BertVectorizer` is provided. It needs the
 > optional `transformers` + `torch` packages *and* network access to the model
-> hub; where those are unavailable the experiments fall back to BoW / TF-IDF /
-> Word2Vec and BERT is skipped automatically.
+> hub; where those are unavailable the experiments use BoW / TF-IDF / Word2Vec /
+> GloVe and BERT is skipped automatically.
 
 ---
 
@@ -137,7 +137,7 @@ metrics + confusion matrices + figures
 ├── src/
 │   ├── data_generation.py  # synthetic issue-report generator
 │   ├── preprocessing.py     # text cleaning / lemmatisation
-│   ├── vectorization.py     # BoW / TF-IDF / Word2Vec / BERT
+│   ├── vectorization.py     # BoW / TF-IDF / Word2Vec / GloVe / BERT
 │   ├── balancing.py         # SMOTE / under-sampling
 │   ├── models.py            # classifiers + hyper-parameter grids
 │   ├── evaluation.py        # metrics + figures

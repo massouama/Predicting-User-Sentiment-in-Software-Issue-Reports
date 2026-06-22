@@ -126,6 +126,76 @@ def make_word2vec() -> Word2VecVectorizer:
 
 
 # ---------------------------------------------------------------------------
+# Pre-trained embedding vectoriser (GloVe / word2vec via gensim-data)
+# ---------------------------------------------------------------------------
+# Module-level cache of loaded pre-trained vectors, keyed by model name.  The
+# vectors (100-300 MB) live here, NOT on the transformer instance, so the fitted
+# transformer stays tiny and the joblib pipeline cache never pickles them.
+_PRETRAINED_CACHE: dict = {}
+
+
+def pretrained_available(model_name: str = "glove-wiki-gigaword-100") -> bool:
+    """Return ``True`` if the pre-trained vectors are loadable (downloading once).
+
+    Loads via gensim-data (hosted on GitHub).  The result is cached, so the first
+    call may download / load the model and later calls are instant.
+    """
+    try:
+        _load_pretrained(model_name)
+        return True
+    except Exception:
+        return False
+
+
+def _load_pretrained(model_name: str):
+    """Load (and cache) pre-trained KeyedVectors via gensim-data."""
+    if model_name not in _PRETRAINED_CACHE:
+        import gensim.downloader as api
+
+        _PRETRAINED_CACHE[model_name] = api.load(model_name)
+    return _PRETRAINED_CACHE[model_name]
+
+
+class PretrainedEmbeddingVectorizer(BaseEstimator, TransformerMixin):
+    """Average-pooled **pre-trained** word embeddings (GloVe or word2vec).
+
+    Unlike :class:`Word2VecVectorizer`, the embeddings here are *pre-trained* on a
+    massive external corpus and merely loaded -- ``fit`` learns nothing.  Each
+    document becomes the mean of its in-vocabulary word vectors; out-of-vocabulary
+    tokens are skipped and empty documents map to the zero vector.
+
+    The default ``glove-wiki-gigaword-100`` (Wikipedia + Gigaword, 100-d, ~134 MB)
+    is a practical choice; pass ``model_name="word2vec-google-news-300"`` for the
+    canonical 300-d Google-News *word2vec* vectors (~1.7 GB) without any other
+    change.
+    """
+
+    def __init__(self, model_name: str = "glove-wiki-gigaword-100"):
+        self.model_name = model_name
+
+    def fit(self, X, y=None):  # noqa: N803 - sklearn naming convention
+        """Ensure the pre-trained vectors are loaded; record their dimension."""
+        kv = _load_pretrained(self.model_name)
+        self.vector_size_ = kv.vector_size
+        return self
+
+    def transform(self, X):  # noqa: N803 - sklearn naming convention
+        """Mean-pool pre-trained word vectors into one dense vector per document."""
+        kv = _load_pretrained(self.model_name)
+        out = np.zeros((len(X), kv.vector_size), dtype=np.float32)
+        for i, doc in enumerate(X):
+            vectors = [kv[tok] for tok in doc.split() if tok in kv.key_to_index]
+            if vectors:
+                out[i] = np.mean(vectors, axis=0)
+        return out
+
+
+def make_pretrained() -> PretrainedEmbeddingVectorizer:
+    """Factory for :class:`PretrainedEmbeddingVectorizer` (pre-trained GloVe)."""
+    return PretrainedEmbeddingVectorizer()
+
+
+# ---------------------------------------------------------------------------
 # BERT embedding vectoriser (optional)
 # ---------------------------------------------------------------------------
 def bert_available() -> bool:
@@ -205,5 +275,6 @@ VECTORIZERS: dict[str, dict] = {
     "BoW": {"factory": make_bow, "dense": False},
     "TF-IDF": {"factory": make_tfidf, "dense": False},
     "Word2Vec": {"factory": make_word2vec, "dense": True},
+    "GloVe": {"factory": make_pretrained, "dense": True},
     "BERT": {"factory": make_bert, "dense": True},
 }
