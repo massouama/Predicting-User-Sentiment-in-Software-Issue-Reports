@@ -30,6 +30,11 @@ All outputs are written under [`results/`](results/): a model-comparison table,
 confusion matrices, comparison charts and the ablation figures referenced in the
 report.
 
+```bash
+# 4. (optional) Rebuild the PDF report from the Markdown source
+python scripts/build_report_pdf.py     # -> report/REPORT.pdf
+```
+
 ---
 
 ## 2. The dataset
@@ -139,11 +144,14 @@ metrics + confusion matrices + figures
 │   └── experiment.py        # orchestration of every experiment
 ├── scripts/
 │   ├── generate_dataset.py
-│   └── explore_data.py
+│   ├── explore_data.py
+│   └── build_report_pdf.py  # Markdown report -> PDF
 ├── results/                # tables, confusion matrices, figures (generated)
 └── report/
-    └── REPORT.md            # full written report
+    ├── REPORT.md            # full written report (source)
+    └── REPORT.pdf           # rendered PDF (submission deliverable)
 ```
 
-See [`report/REPORT.md`](report/REPORT.md) for the dataset description, full
+See [`report/REPORT.md`](report/REPORT.md) (or the rendered
+[`report/REPORT.pdf`](report/REPORT.pdf)) for the dataset description, full
 results tables, comparison discussion, trade-offs and future work.
