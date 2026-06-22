@@ -1,0 +1,2 @@
+max_estimators,trees_used,test_accuracy,test_f1_macro
+500,62,0.87,0.8428363165871072
