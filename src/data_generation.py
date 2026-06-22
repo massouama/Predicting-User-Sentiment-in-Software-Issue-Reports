@@ -240,17 +240,24 @@ def generate_dataset(
 
 
 def load_or_create_dataset(path=config.DATASET_PATH, **kwargs) -> pd.DataFrame:
-    """Return the cached dataset, generating and caching it on first use.
+    """Return the cached dataset, building it on first use per :data:`config.DATASET_SOURCE`.
 
-    Caching the CSV guarantees that every downstream script -- exploration,
-    training, reporting -- operates on the exact same data.
+    Dispatches between the **real** app-review corpus (default) and the synthetic
+    generator (offline fallback).  Caching the processed CSV guarantees that every
+    downstream script -- exploration, training, reporting -- operates on the exact
+    same data, and makes runs reproducible even without network access.
     """
     path = Path(path)
     if path.exists():
         return pd.read_csv(path)
 
     config.ensure_directories()
-    df = generate_dataset(**kwargs)
+    if config.DATASET_SOURCE == "app_reviews":
+        from src.real_data import build_app_reviews_dataset  # lazy: avoids a hard dep
+
+        df = build_app_reviews_dataset()
+    else:
+        df = generate_dataset(**kwargs)
     df.to_csv(path, index=False)
     return df
 

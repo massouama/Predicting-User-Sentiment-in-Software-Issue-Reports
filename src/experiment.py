@@ -85,6 +85,10 @@ def prepare_data():
     df = load_or_create_dataset()
     df["clean"] = TextPreprocessor().transform(df["text"].tolist())
 
+    # Real reviews can reduce to an empty string (non-English, all stop-words,
+    # emoji-only); drop those so every vectoriser sees a non-degenerate document.
+    df = df[df["clean"].str.len() > 0].reset_index(drop=True)
+
     X_train, X_test, y_train, y_test = train_test_split(
         df["clean"].to_numpy(),
         df["label"].to_numpy(),

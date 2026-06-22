@@ -21,5 +21,8 @@ results/models/*.joblib
 results/.joblib_cache/
 results/run_log.txt
 
+# Raw app-review download (~40 MB); the processed sample is committed instead
+data/reviews_raw.csv
+
 # NLTK data downloaded at runtime
 nltk_data/

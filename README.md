@@ -22,7 +22,7 @@ pip install -r requirements.txt
 python scripts/generate_dataset.py     # (re)generate the cached corpus
 python scripts/explore_data.py          # summary stats + EDA figures
 
-# 3. Run the whole study end to end (~4-5 minutes on 4 cores)
+# 3. Run the whole study end to end (~8 minutes on 4 cores)
 python main.py                          # add --fast to skip the slowest extra
 ```
 
@@ -39,31 +39,28 @@ python scripts/build_report_pdf.py     # -> report/REPORT.pdf
 
 ## 2. The dataset
 
-Public sentiment-labelled issue corpora require API keys or downloads from hosts
-that are unreachable in a sandboxed environment, so the project ships with a
-**reproducible synthetic generator** ([`src/data_generation.py`](src/data_generation.py))
-that mirrors the structure of real issue trackers:
+By default the project uses a **real, pre-cleaned app-review dataset** — the
+*"App Store reviews"* option of the brief. It is the Google Play review collection
+from the open research repo
+[`sealuzh/user_quality`](https://github.com/sealuzh/user_quality) (288 k reviews,
+395 apps), fetched credential-free by [`src/real_data.py`](src/real_data.py). Star
+ratings are mapped to sentiment (1–2★ → negative, 3★ → neutral, 4–5★ → positive),
+and a reproducible **class-stratified sample of 6 000** reviews is kept:
 
-| Class | Typical content | Share |
-|-------|-----------------|-------|
-| `negative` | crashes, bugs, frustration | ~53 % |
-| `neutral`  | questions, feature requests, factual notes | ~30 % |
-| `positive` | praise, thanks, "works great now" | ~17 % |
+| Class | From | Share |
+|-------|------|-------|
+| `negative` | 1–2 ★ | ~21 % |
+| `neutral`  | 3 ★ | ~9 % |
+| `positive` | 4–5 ★ | ~70 % |
 
-Three properties make it a *genuine* learning problem rather than trivial keyword
-matching:
+The strong, natural positive skew is what motivates the SMOTE / under-sampling
+experiment, and 3★ "neutral" reviews genuinely overlap their neighbours — a real,
+non-trivial learning problem.
 
-1. **Shared software vocabulary** across all classes (same components, versions,
-   actions) — the model must learn *sentiment*, not topic.
-2. **Ambiguity & mixed signals** — a fraction of reports use tone-neutral phrasing
-   or borrow an opener/closing remark from another class (`AMBIGUITY_PROB`,
-   `MIXING_PROB` in [`config.py`](config.py)).
-3. **Label noise** (`LABEL_NOISE`) — a small fraction of labels are flipped,
-   capping achievable accuracy below 100 %, exactly as human annotation would.
-
-The deliberate class imbalance is what motivates the SMOTE / under-sampling
-experiment. Everything is driven by a single seed (`RANDOM_STATE`), so the corpus
-is byte-for-byte reproducible.
+> **Offline fallback.** A reproducible **synthetic generator**
+> ([`src/data_generation.py`](src/data_generation.py)) is also bundled; set
+> `DATASET_SOURCE = "synthetic"` in [`config.py`](config.py) to use it. The rest
+> of the pipeline is identical either way.
 
 ---
 
@@ -107,6 +104,7 @@ metrics + confusion matrices + figures
 
 | Brief requirement | Where |
 |---|---|
+| Pre-cleaned dataset (App Store reviews) | `src/real_data.py` |
 | Cleaning, lemmatisation, stop-words | `src/preprocessing.py` |
 | BoW, TF-IDF, Word2Vec, GloVe (pre-trained), BERT | `src/vectorization.py` |
 | SMOTE / under-sampling | `src/balancing.py`, `experiment_imbalance` |
@@ -135,7 +133,8 @@ metrics + confusion matrices + figures
 ├── data/
 │   └── issue_sentiment.csv # cached, reproducible corpus
 ├── src/
-│   ├── data_generation.py  # synthetic issue-report generator
+│   ├── real_data.py        # real app-review loader (default dataset)
+│   ├── data_generation.py  # synthetic generator (offline fallback)
 │   ├── preprocessing.py     # text cleaning / lemmatisation
 │   ├── vectorization.py     # BoW / TF-IDF / Word2Vec / GloVe / BERT
 │   ├── balancing.py         # SMOTE / under-sampling

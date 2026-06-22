@@ -21,43 +21,58 @@ reproducible (single global seed `RANDOM_STATE = 42`).
 
 ## 2. Dataset description
 
-### 2.1 Source and rationale
+### 2.1 Source
 
-Ready-to-use sentiment-labelled issue corpora require API credentials or downloads
-from hosts unreachable in our sandbox, so we use a **reproducible synthetic
-generator** ([`src/data_generation.py`](../src/data_generation.py)) that emulates
-the linguistic structure of real issue trackers. Each report is assembled from
-realistic vocabulary banks (components, versions, actions) and class-specific
-sentiment clauses, openers and closing remarks.
+We use a **real, pre-cleaned app-review dataset** — the *"App Store reviews"*
+option of the brief. It is the Google Play review collection released with the
+open-source software-engineering research repository
+[`sealuzh/user_quality`](https://github.com/sealuzh/user_quality): **288 065
+reviews across 395 apps**, each with the review text and a **1–5 star rating**.
+It is fetched once (credential-free) by [`src/real_data.py`](../src/real_data.py).
 
-### 2.2 Composition (3 000 reports)
+Sentiment labels are derived from the star rating with the standard convention:
 
-| Class | Meaning | Count | Share |
-|-------|---------|------:|------:|
-| `negative` | crashes, bugs, frustration | 1 590 | 53.0 % |
-| `neutral`  | questions, feature requests, factual notes | 896 | 29.9 % |
-| `positive` | praise, thanks, "works great now" | 514 | 17.1 % |
+| Stars | Sentiment |
+|:--:|:--:|
+| 1–2 ★ | `negative` |
+| 3 ★ | `neutral` |
+| 4–5 ★ | `positive` |
+
+> A fully reproducible **synthetic generator**
+> ([`src/data_generation.py`](../src/data_generation.py)) is also provided as an
+> offline fallback (`config.DATASET_SOURCE = "synthetic"`); the rest of the
+> pipeline is identical regardless of source.
+
+### 2.2 Composition (stratified sample of 6 000 reviews)
+
+The full 288 k corpus is far larger than needed, so we keep a reproducible,
+class-stratified sample that **preserves the natural — strongly positive-skewed —
+imbalance** (after dropping reviews that reduce to empty text once cleaned, 5 978
+remain):
+
+| Class | Source rating | Count | Share |
+|-------|---------------|------:|------:|
+| `negative` | 1–2 ★ | 1 286 | 21.5 % |
+| `neutral`  | 3 ★ | 523 | 8.7 % |
+| `positive` | 4–5 ★ | 4 169 | 69.7 % |
 
 ![Class distribution](../results/figures/class_distribution.png)
 
-The imbalance is deliberate (issue trackers are dominated by complaints) and
-motivates the resampling experiment in §6.
+This real, severe imbalance (positives outnumber neutrals ~8:1) is exactly what
+the resampling experiment in §6 addresses.
 
-### 2.3 What makes the task non-trivial
+### 2.3 Why the task is genuinely hard
 
-A naïve synthetic dataset would be perfectly keyword-separable and every model
-would saturate at the same score. We inject three realistic difficulties:
+Real app reviews bring real difficulty — no synthetic noise needed:
 
-1. **Shared software vocabulary** across all classes — the model must learn
-   *sentiment*, not topic.
-2. **Ambiguity & mixed signals** — 22 % of reports use a tone-neutral core clause
-   ("*does the job, more or less*"), and 15 % borrow an opener/closing remark from
-   another class, producing genuinely mixed-signal text.
-3. **Label noise** — 8 % of labels are randomly flipped, emulating annotation
-   disagreement and capping achievable accuracy below 100 %.
-
-Together these lower the achievable ceiling to a realistic **≈ 0.88 macro-F1**
-and create meaningful spread between models.
+1. **Star-derived labels are a proxy.** A 3★ "neutral" review is often mildly
+   positive or negative in wording, so the `neutral` class genuinely overlaps its
+   neighbours.
+2. **Short, noisy, informal text.** Median length ≈ 26 characters; reviews contain
+   typos, emoji, app names and the occasional non-English fragment.
+3. **Weak/ambiguous signals.** Many reviews ("*Taju is worker mane*",
+   "*Mollamalek*") carry little sentiment cue, capping the achievable score well
+   below 100 % and spreading the models out.
 
 ---
 
@@ -115,7 +130,7 @@ equally), and confusion matrices. Macro-F1 is the tuning target.
 - **Cache vectorisers** (`joblib.Memory`) against one fixed `StratifiedKFold`, so
   the expensive Word2Vec / TF-IDF fits are computed once per fold and reused across
   every hyper-parameter combination and classifier. The full study (4 vectorisers
-  × 5 classifiers + the four ablations) runs in ~4–5 min on 4 cores.
+  × 5 classifiers + the four ablations) runs in ~8 min on 4 cores.
 
 ---
 
@@ -135,53 +150,56 @@ Test-set results (held-out 20 %), sorted by macro-F1:
 
 | Rank | Vectoriser | Classifier | CV F1 | Accuracy | Precision | Recall | **F1 (macro)** |
 |--:|---|---|--:|--:|--:|--:|--:|
-| 1 | TF-IDF | **Naive Bayes** | 0.850 | 0.898 | 0.900 | 0.864 | **0.880** |
-| 2 | TF-IDF | Logistic Regression | 0.843 | 0.895 | 0.903 | 0.858 | 0.877 |
-| 3 | BoW | Logistic Regression | 0.841 | 0.895 | 0.901 | 0.854 | 0.874 |
-| 4 | GloVe | Logistic Regression | 0.827 | 0.878 | 0.875 | 0.840 | 0.856 |
-| 5 | BoW | Naive Bayes | 0.835 | 0.877 | 0.853 | 0.852 | 0.852 |
-| 6 | BoW | Random Forest | 0.832 | 0.873 | 0.876 | 0.832 | 0.850 |
-| 7 | Word2Vec | Random Forest | 0.810 | 0.870 | 0.867 | 0.835 | 0.849 |
-| 8 | TF-IDF | Decision Tree | 0.802 | 0.870 | 0.871 | 0.832 | 0.849 |
-| 9 | TF-IDF | Random Forest | 0.825 | 0.867 | 0.864 | 0.834 | 0.847 |
-| 10 | BoW | Decision Tree | 0.814 | 0.867 | 0.869 | 0.828 | 0.845 |
-| 11 | Word2Vec | Logistic Regression | 0.827 | 0.868 | 0.856 | 0.836 | 0.845 |
-| 12 | Word2Vec | AdaBoost | 0.787 | 0.860 | 0.849 | 0.826 | 0.836 |
-| 13 | Word2Vec | Naive Bayes | 0.775 | 0.838 | 0.803 | 0.824 | 0.811 |
-| 14 | Word2Vec | Decision Tree | 0.737 | 0.795 | 0.763 | 0.750 | 0.756 |
-| 15 | GloVe | AdaBoost | 0.701 | 0.788 | 0.771 | 0.723 | 0.740 |
-| 16 | GloVe | Naive Bayes | 0.705 | 0.765 | 0.724 | 0.748 | 0.732 |
-| 17 | GloVe | Random Forest | 0.680 | 0.790 | 0.826 | 0.680 | 0.711 |
-| 18 | BoW | AdaBoost | 0.606 | 0.742 | 0.835 | 0.601 | 0.628 |
-| 19 | TF-IDF | AdaBoost | 0.610 | 0.733 | 0.826 | 0.589 | 0.612 |
-| 20 | GloVe | Decision Tree | 0.572 | 0.665 | 0.602 | 0.597 | 0.600 |
+| 1 | BoW | **Naive Bayes** | 0.540 | 0.745 | 0.533 | 0.516 | **0.523** |
+| 2 | BoW | Decision Tree | 0.473 | 0.709 | 0.514 | 0.505 | 0.507 |
+| 3 | BoW | Logistic Regression | 0.525 | 0.735 | 0.509 | 0.494 | 0.499 |
+| 4 | TF-IDF | Logistic Regression | 0.523 | 0.746 | 0.510 | 0.490 | 0.494 |
+| 5 | TF-IDF | Naive Bayes | 0.496 | 0.765 | 0.528 | 0.490 | 0.492 |
+| 6 | BoW | Random Forest | 0.477 | 0.751 | 0.512 | 0.478 | 0.478 |
+| 7 | Word2Vec | Decision Tree | 0.466 | 0.705 | 0.525 | 0.471 | 0.471 |
+| 8 | Word2Vec | Naive Bayes | 0.477 | 0.579 | 0.485 | 0.512 | 0.470 |
+| 9 | TF-IDF | Random Forest | 0.460 | 0.753 | 0.493 | 0.467 | 0.465 |
+| 10 | Word2Vec | Random Forest | 0.456 | 0.744 | 0.481 | 0.471 | 0.463 |
+| 11 | TF-IDF | Decision Tree | 0.474 | 0.694 | 0.451 | 0.457 | 0.452 |
+| 12 | Word2Vec | AdaBoost | 0.445 | 0.738 | 0.434 | 0.470 | 0.451 |
+| 13 | Word2Vec | Logistic Regression | 0.449 | 0.747 | 0.455 | 0.457 | 0.450 |
+| 14 | GloVe | Logistic Regression | 0.451 | 0.737 | 0.447 | 0.446 | 0.440 |
+| 15 | GloVe | AdaBoost | 0.423 | 0.717 | 0.416 | 0.428 | 0.417 |
+| 16 | GloVe | Decision Tree | 0.423 | 0.677 | 0.417 | 0.420 | 0.414 |
+| 17 | GloVe | Random Forest | 0.397 | 0.726 | 0.442 | 0.406 | 0.398 |
+| 18 | BoW | AdaBoost | 0.363 | 0.712 | 0.420 | 0.382 | 0.366 |
+| 19 | TF-IDF | AdaBoost | 0.362 | 0.707 | 0.403 | 0.377 | 0.360 |
+| 20 | GloVe | Naive Bayes | 0.369 | 0.414 | 0.454 | 0.424 | 0.343 |
 
 ![Macro-F1 comparison](../results/figures/comparison_f1.png)
 
-Confusion matrix of the best model (TF-IDF + Naive Bayes):
+Confusion matrix of the best model (BoW + Naive Bayes):
 
-![Best confusion matrix](../results/confusion_matrices/TF-IDF_NaiveBayes.png)
+![Best confusion matrix](../results/confusion_matrices/BoW_NaiveBayes.png)
 
 ### Reading the results
 
-- **TF-IDF + Naive Bayes wins (F1 = 0.880).** For short, keyword-driven text the
-  IDF re-weighting plus NB's strong independence assumption is hard to beat, and
-  TF-IDF clearly improves NB over plain BoW (0.880 vs 0.852).
-- **Logistic Regression is the most robust learner** — top-3 on TF-IDF/BoW and
-  still strong on Word2Vec (0.845–0.877) — thanks to L2 regularisation.
-- **AdaBoost collapses on sparse high-dimensional text (0.61–0.63)** because its
-  depth-1 stumps can each test only a single word out of ~5 000; yet it *recovers
-  to 0.836 on dense 100-d Word2Vec*, where each split is informative. A textbook
-  illustration of matching the model to the feature geometry.
-- **Word2Vec trails the sparse methods** (≈ 0.81–0.85): embeddings trained on a
-  small in-domain corpus blur the precise lexical cues that TF-IDF preserves, but
-  they make tree/boosting models behave far better (dense, low-dimensional).
-- **Pre-trained GloVe splits sharply by classifier.** With Logistic Regression it
-  is excellent (0.856, 4th overall) — a smooth, dense space is ideal for a linear
-  model — but with trees / NB it is the weakest family (Decision Tree 0.600,
-  *last*). General-domain Wikipedia vectors are also a slightly worse fit than the
-  *in-domain* corpus-trained Word2Vec for every classifier except the linear one,
-  a nice illustration that "pre-trained" is not automatically "better".
+First, a crucial caveat: **accuracy is misleading here.** Because ~70 % of reviews
+are positive, a model can score ~0.75 accuracy while almost ignoring the minority
+classes — so **macro-F1 (which weights all three classes equally) is the metric
+that matters**, and it sits around 0.45–0.52.
+
+- **BoW + Naive Bayes wins (macro-F1 = 0.523).** On short, noisy, informal review
+  text, simple word counts plus NB's robustness to high dimensionality generalise
+  best; the IDF re-weighting of TF-IDF does *not* help here (TF-IDF NB 0.492).
+- **The sparse count methods (BoW/TF-IDF) lead overall**, with Naive Bayes and
+  Logistic Regression filling the top five — linear/probabilistic models suit
+  short lexical text.
+- **AdaBoost is worst on sparse features (0.36)**: its depth-1 stumps can each test
+  only one word out of 5 000. It improves on dense, low-dimensional embeddings
+  (Word2Vec 0.451) — matching the model to the feature geometry.
+- **Pre-trained GloVe is the weakest family (0.34–0.44).** General-domain Wikipedia
+  vectors, mean-pooled, wash out the specific lexical cues ("crash", "love", "buggy")
+  that short reviews live on; Gaussian NB on GloVe is dead last (0.343). A clear
+  reminder that *pre-trained is not automatically better* than in-domain features.
+- **Scores are far lower and tighter than on clean/synthetic data** — the honest
+  signature of a real, noisy, severely imbalanced corpus with proxy (star-derived)
+  labels.
 
 ---
 
@@ -193,20 +211,27 @@ training folds only.
 
 | Strategy | Accuracy | Macro-F1 | Recall `neg` | Recall `neu` | Recall `pos` |
 |---|--:|--:|--:|--:|--:|
-| none (baseline) | 0.895 | **0.877** | 0.969 | 0.838 | 0.767 |
-| SMOTE | 0.885 | 0.863 | 0.931 | 0.860 | **0.786** |
-| under-sampling | 0.860 | 0.834 | 0.887 | 0.855 | 0.786 |
+| none (baseline) | **0.772** | 0.482 | 0.490 | **0.010** | **0.954** |
+| SMOTE | 0.640 | **0.502** | 0.560 | **0.295** | 0.709 |
+| under-sampling | 0.601 | 0.485 | 0.521 | **0.390** | 0.652 |
 
 ![Imbalance handling](../results/figures/imbalance_f1.png)
 
-**Interpretation.** Both resampling methods raise minority-class recall —
-`positive` 0.767 → 0.786 and `neutral` 0.838 → 0.860 — but at the cost of
-`negative` recall (0.969 → 0.931 with SMOTE, → 0.887 under-sampling), so overall
-macro-F1 slips slightly. This is the expected behaviour: resampling **redistributes
-errors toward the minority classes** rather than creating free accuracy. SMOTE
-dominates under-sampling because it synthesises new minority points instead of
-discarding majority data. On this dataset the regularised baseline already handles
-the imbalance well, so we keep it; on a harder imbalance SMOTE would be the choice.
+**Interpretation — this is the clearest result in the study.** The untreated
+baseline reaches a deceptively high **0.772 accuracy by almost entirely ignoring
+the minority classes**: its `neutral` recall is **0.010** — it correctly identifies
+1 neutral review in 100 — while predicting `positive` 95 % of the time. Resampling
+fixes exactly this:
+
+- **SMOTE lifts `neutral` recall from 0.010 to 0.295 (≈30×)** and `negative` from
+  0.490 to 0.560, raising **macro-F1 from 0.482 to 0.502** — while accuracy *drops*
+  to 0.640 because the model stops over-predicting the majority.
+- **Under-sampling pushes `neutral` recall even higher (0.390)** but discards data,
+  so its overall macro-F1 (0.485) trails SMOTE.
+
+This is the textbook lesson of imbalanced learning: **accuracy is the wrong metric**,
+and resampling trades majority-class accuracy for genuine minority-class
+performance. SMOTE is the best overall choice here.
 
 ---
 
@@ -218,20 +243,21 @@ LSA) — and measure downstream macro-F1 (TF-IDF + Logistic Regression).
 
 | Components | Explained variance | Macro-F1 |
 |--:|--:|--:|
-| 50 | 41.7 % | 0.822 |
-| 100 | 63.3 % | 0.870 |
-| 200 | 71.9 % | 0.874 |
-| 300 | 76.9 % | 0.874 |
-| 1 987 (full) | 100 % | 0.877 |
+| 50 | 20.5 % | 0.434 |
+| 100 | 28.5 % | 0.450 |
+| 200 | 39.4 % | 0.456 |
+| 300 | 47.3 % | 0.464 |
+| 5 000 (full) | 100 % | 0.482 |
 
 ![SVD explained variance](../results/figures/pca_explained_variance.png)
 ![Macro-F1 vs components](../results/figures/pca_f1.png)
 
-**Interpretation.** Just **200 components (~10 % of the 1 987 features)** recover
-**0.874 of the 0.877** full-feature macro-F1 — a 10× compression for a 0.003 drop.
-Dimensionality reduction is therefore an excellent speed/memory trade-off here,
-and would be essential before feeding sparse text to a dense model such as
-gradient boosting (see §9).
+**Interpretation.** Compressing the 5 000-dim TF-IDF space to **300 components
+(6 %)** keeps macro-F1 at **0.464 of the 0.482** full-feature score — a ~17×
+compression for a 0.018 drop. The trade-off is real but modest, and reduction is
+*essential* before feeding the otherwise-sparse text to a dense learner such as
+gradient boosting (see §9). The noisier real corpus needs more components than a
+clean one would, which is why the curve rises more gradually.
 
 ---
 
@@ -242,21 +268,19 @@ post-pruning path** (`ccp_alpha`):
 
 | `ccp_alpha` | # nodes | Train acc | Test acc |
 |--:|--:|--:|--:|
-| 0.0000 (unpruned) | 707 | 0.999 | 0.800 |
-| 0.0010 | 147 | 0.890 | 0.858 |
-| 0.0014 | 81 | 0.863 | 0.868 |
-| **0.0023** | **65** | **0.856** | **0.870** |
-| 0.0078 | 35 | 0.804 | 0.818 |
-| 0.0165 (over-pruned) | 19 | 0.723 | 0.737 |
+| 0.0000 (unpruned) | 2 083 | 0.968 | 0.698 |
+| 0.0009 | 95 | 0.769 | **0.719** |
+| 0.0017 | 47 | 0.746 | 0.709 |
+| 0.0043 (over-pruned) | 13 | 0.708 | 0.694 |
 
 ![Pruning path](../results/figures/pruning_accuracy.png)
 
-**Interpretation.** The unpruned tree memorises the training set (train 0.999,
-test 0.800 — a 0.20 generalisation gap). Increasing `ccp_alpha` shrinks the tree
-from 707 to ~65 nodes while **raising test accuracy to 0.870** and closing the
-gap; pruning too hard (19 nodes) underfits. Pre-pruning (`max_depth`,
-`min_samples_leaf`) is also tuned in the main grid (§5). This is the classic
-bias–variance trade-off made visible.
+**Interpretation.** The unpruned tree memorises the training set (train 0.968 vs
+test 0.698 — a 0.27 generalisation gap). Increasing `ccp_alpha` shrinks it from
+**2 083 to 95 nodes** while *raising* test accuracy to **0.719** and shrinking the
+gap to 0.05; pruning too hard (13 nodes) underfits. Pre-pruning (`max_depth`,
+`min_samples_leaf`) is also tuned in the main grid (§5). A textbook bias–variance
+trade-off — a 22× smaller, better-generalising tree.
 
 ---
 
@@ -268,12 +292,12 @@ monitoring a validation slice.
 
 | Max trees | Trees actually used | Test accuracy | Test macro-F1 |
 |--:|--:|--:|--:|
-| 500 | **62** | 0.870 | 0.843 |
+| 500 | **86** | 0.746 | 0.456 |
 
 ![Early stopping](../results/figures/early_stopping.png)
 
-**Interpretation.** Early stopping halted training after **62 of 500** trees once
-validation performance plateaued — an **≈ 8× reduction** in training cost with no
+**Interpretation.** Early stopping halted training after **86 of 500** trees once
+validation performance plateaued — an **≈ 6× reduction** in training cost with no
 loss of test quality, and protection against the over-fitting that more trees
 would bring. (The SVD reduction from §7 is what makes boosting on text efficient.)
 
@@ -283,32 +307,37 @@ would bring. (The SVD reduction from §7 is what makes boosting on text efficien
 
 | Decision | Why | Trade-off |
 |---|---|---|
-| TF-IDF over BoW | IDF down-weights ubiquitous terms; best single result | marginally costlier to fit |
+| Sparse counts (BoW/TF-IDF) | best fit for short lexical review text; BoW+NB won | huge but cheap sparse vocabulary |
 | Keep negation stop-words | preserves sentiment-flipping cues | slightly larger vocabulary |
 | Multinomial vs Gaussian NB by feature type | NB assumptions must match the data | none (handled automatically) |
 | Logistic Regression with L2 | strong, robust, regularised baseline | linear decision boundary |
 | TruncatedSVD not PCA | avoids densifying sparse TF-IDF | loses exact feature interpretability |
-| Pre-trained GloVe + linear model | dense smooth space suits Logistic Regression (0.856) | poor for trees; weaker than in-domain Word2Vec elsewhere |
-| Macro-F1 as the metric | weights minority classes equally on an imbalanced problem | hides raw accuracy (reported alongside) |
-| Resampling inside `imblearn` pipeline | prevents leakage of synthetic samples into validation | extra pipeline plumbing |
-| Preprocess once + cache vectorisers | whole study in a couple of minutes | a few hundred MB of disk cache |
+| Pre-trained GloVe | tests transfer from general text | weakest here: mean-pooling washes out review-specific cues |
+| **Macro-F1 as the metric** | the 70 % positive skew makes accuracy meaningless | must be read alongside accuracy |
+| **SMOTE inside an `imblearn` pipeline** | rescues near-zero minority recall, leakage-free | lowers majority accuracy |
+| Preprocess once + cache vectorisers | whole study in ~8 min | a few hundred MB of disk cache |
 
-**Headline findings.** (1) Simple linear / probabilistic models on TF-IDF are the
-sweet spot for short issue text. (2) Boosting needs dense, low-dimensional features
-to work — never raw sparse n-grams. (3) **Pre-trained embeddings (GloVe) help only
-the linear model**; in-domain Word2Vec and TF-IDF win everywhere else. (4)
-Resampling trades majority recall for minority recall rather than improving
-everything at once. (5) Both pruning and early stopping convincingly curb
+**Headline findings.** (1) Simple sparse models win — **BoW + Naive Bayes (0.523
+macro-F1)** beats every embedding/ensemble on short, noisy review text. (2) On a
+70 %-positive corpus **accuracy (~0.75) is a trap**; macro-F1 exposes that the
+untreated baseline barely predicts the minority classes. (3) **SMOTE is decisive**,
+lifting `neutral` recall ~30× (0.010 → 0.295) and improving macro-F1. (4) Boosting
+and pre-trained GloVe underperform here — AdaBoost stumps and mean-pooled
+general-domain vectors both lose the lexical cues short reviews depend on. (5)
+Pruning (2 083 → 95 nodes) and early stopping (86/500 trees) both curb
 over-fitting.
 
 ---
 
 ## 11. Challenges faced
 
-- **No downloadable labelled corpus** in the sandbox → built a controlled,
-  reproducible synthetic generator instead, and had to *calibrate its difficulty*
-  (ambiguity, mixed signals, label noise) so the comparison was informative rather
-  than saturated at a single score.
+- **Restricted data access** — Kaggle/Hugging Face and the GitHub API are blocked
+  in the sandbox → sourced a **real** app-review corpus from a raw GitHub URL
+  (`sealuzh/user_quality`) that *is* reachable, and kept a synthetic generator as
+  an offline fallback.
+- **Star ratings ≠ clean sentiment labels** — 3★ "neutral" reviews overlap their
+  neighbours and the corpus is heavily positive-skewed, making the minority
+  classes (and macro-F1) genuinely hard.
 - **MultinomialNB rejects negative features** → automatic switch to GaussianNB for
   dense embeddings / reduced features.
 - **Run-time of nested tuning** across 20 vectoriser×model combinations →
@@ -321,8 +350,8 @@ over-fitting.
 
 ## 12. Future work
 
-- Run on a **real** corpus (GitHub/JIRA issues, App-Store reviews) once API access
-  is available; the pipeline already accepts any `text,label` CSV.
+- Collect **GitHub/JIRA issues** directly once API access is available (the
+  pipeline already accepts any `text,label` CSV), to complement the app reviews.
 - Enable the **BERT** path and add a fine-tuned transformer for comparison.
 - Try **class-weighting** as a leakage-free alternative to resampling, and
   cost-sensitive thresholds for the minority class.
@@ -335,7 +364,7 @@ over-fitting.
 
 ```bash
 pip install -r requirements.txt
-python main.py            # full study (~4–5 min on 4 cores), writes results/
+python main.py            # full study (~8 min on 4 cores), writes results/
 ```
 
 Every figure and table in this report is regenerated under

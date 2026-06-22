@@ -37,9 +37,31 @@ DATASET_PATH: Path = DATA_DIR / "issue_sentiment.csv"
 # ---------------------------------------------------------------------------
 # Dataset
 # ---------------------------------------------------------------------------
+# Which corpus to use:
+#   "app_reviews" -> a REAL, pre-cleaned Google Play review dataset (288 k rows)
+#                    from the open `sealuzh/user_quality` research repository,
+#                    with star ratings mapped to sentiment.  This is the default
+#                    and matches the brief's "App Store reviews dataset" example.
+#   "synthetic"   -> the bundled reproducible generator (offline fallback).
+DATASET_SOURCE: str = "app_reviews"
+
 # Class labels, ordered from negative to positive.  This ordering is reused for
 # every confusion matrix and report so axes are always consistent.
 CLASS_NAMES: tuple[str, ...] = ("negative", "neutral", "positive")
+
+# --- Real dataset (app reviews) -------------------------------------------
+# Direct, credential-free download of the raw reviews CSV (id, package_name,
+# review, date, star, version_id).
+REVIEWS_URL: str = (
+    "https://raw.githubusercontent.com/sealuzh/user_quality/master/csv_files/reviews.csv"
+)
+RAW_REVIEWS_PATH: Path = DATA_DIR / "reviews_raw.csv"   # cached download (git-ignored)
+# Map 1-5 star ratings onto the three sentiment classes (the standard convention:
+# 1-2 = negative, 3 = neutral, 4-5 = positive).
+STAR_TO_SENTIMENT: dict[int, str] = {1: "negative", 2: "negative", 3: "neutral", 4: "positive", 5: "positive"}
+# Stratified sample size kept (full 288 k is far larger than needed and slow);
+# proportions of the natural, positive-heavy imbalance are preserved.
+N_SAMPLES_REAL: int = 6000
 
 # Number of synthetic issue reports to generate and the (deliberately skewed)
 # class proportions.  Issue trackers are dominated by complaints, so negatives
