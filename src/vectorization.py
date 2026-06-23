@@ -1,16 +1,17 @@
 """Text vectorisation strategies compared in this project.
 
-Four families are provided, covering the spectrum from sparse count statistics
-to dense contextual embeddings:
+The four representations named in the brief are provided, covering the spectrum
+from sparse count statistics to dense embeddings:
 
-============  ====================================================  ===========
-Vectoriser    Idea                                                  Output
-============  ====================================================  ===========
-Bag-of-Words  raw n-gram counts                                     sparse, >=0
-TF-IDF        counts re-weighted by inverse document frequency      sparse, >=0
-Word2Vec      mean of trained word embeddings (one vector / doc)    dense, +/-
-BERT          mean-pooled contextual embeddings (optional)          dense, +/-
-============  ====================================================  ===========
+==================  ============================================  ===========
+Vectoriser          Idea                                          Output
+==================  ============================================  ===========
+Bag-of-Words        raw n-gram counts                             sparse, >=0
+TF-IDF              counts x inverse document frequency            sparse, >=0
+Word2Vec            mean of embeddings (trained on our corpus)     dense, +/-
+Word2Vec-pretrained mean of pre-trained Google-News vectors        dense, +/-
+BERT                mean-pooled contextual embeddings (optional)   dense, +/-
+==================  ============================================  ===========
 
 Each strategy is exposed through a ``make_*`` factory returning a fresh,
 scikit-learn-compatible estimator, so callers can freely compose them into
@@ -126,16 +127,23 @@ def make_word2vec() -> Word2VecVectorizer:
 
 
 # ---------------------------------------------------------------------------
-# Pre-trained embedding vectoriser (GloVe / word2vec via gensim-data)
+# Pre-trained Word2Vec vectoriser (Google-News vectors via gensim-data)
 # ---------------------------------------------------------------------------
 # Module-level cache of loaded pre-trained vectors, keyed by model name.  The
-# vectors (100-300 MB) live here, NOT on the transformer instance, so the fitted
-# transformer stays tiny and the joblib pipeline cache never pickles them.
+# vectors live here, NOT on the transformer instance, so the fitted transformer
+# stays tiny and the joblib pipeline cache never pickles them.
 _PRETRAINED_CACHE: dict = {}
 
+# The brief asks specifically for *pre-trained Word2Vec*; we use the canonical
+# Google-News 300-d vectors.  The full model holds 3 M words (~3.6 GB); we load
+# only the most frequent ``_PRETRAINED_LIMIT`` words, which keeps memory modest
+# (~0.6 GB) -- ample coverage since rarer words never appear in short reviews.
+_PRETRAINED_MODEL = "word2vec-google-news-300"
+_PRETRAINED_LIMIT = 500_000
 
-def pretrained_available(model_name: str = "glove-wiki-gigaword-100") -> bool:
-    """Return ``True`` if the pre-trained vectors are loadable (downloading once).
+
+def pretrained_available(model_name: str = _PRETRAINED_MODEL) -> bool:
+    """Return ``True`` if the pre-trained Word2Vec vectors are loadable.
 
     Loads via gensim-data (hosted on GitHub).  The result is cached, so the first
     call may download / load the model and later calls are instant.
@@ -147,30 +155,37 @@ def pretrained_available(model_name: str = "glove-wiki-gigaword-100") -> bool:
         return False
 
 
-def _load_pretrained(model_name: str):
-    """Load (and cache) pre-trained KeyedVectors via gensim-data."""
+def _load_pretrained(model_name: str = _PRETRAINED_MODEL):
+    """Load (and cache) the pre-trained Word2Vec ``KeyedVectors``.
+
+    ``return_path=True`` downloads the model once and yields the file path; we
+    then load it with a vocabulary ``limit`` to cap memory.
+    """
     if model_name not in _PRETRAINED_CACHE:
         import gensim.downloader as api
+        from gensim.models import KeyedVectors
 
-        _PRETRAINED_CACHE[model_name] = api.load(model_name)
+        path = api.load(model_name, return_path=True)
+        _PRETRAINED_CACHE[model_name] = KeyedVectors.load_word2vec_format(
+            path, binary=True, limit=_PRETRAINED_LIMIT
+        )
     return _PRETRAINED_CACHE[model_name]
 
 
 class PretrainedEmbeddingVectorizer(BaseEstimator, TransformerMixin):
-    """Average-pooled **pre-trained** word embeddings (GloVe or word2vec).
+    """Average-pooled **pre-trained Word2Vec** document embeddings.
 
-    Unlike :class:`Word2VecVectorizer`, the embeddings here are *pre-trained* on a
-    massive external corpus and merely loaded -- ``fit`` learns nothing.  Each
-    document becomes the mean of its in-vocabulary word vectors; out-of-vocabulary
-    tokens are skipped and empty documents map to the zero vector.
+    Unlike :class:`Word2VecVectorizer` (which trains on our own corpus), the
+    embeddings here are the canonical **Google-News word2vec** vectors, trained on
+    100 billion words and merely loaded -- ``fit`` learns nothing.  Each document
+    becomes the mean of its in-vocabulary word vectors; out-of-vocabulary tokens
+    are skipped and empty documents map to the zero vector.
 
-    The default ``glove-wiki-gigaword-100`` (Wikipedia + Gigaword, 100-d, ~134 MB)
-    is a practical choice; pass ``model_name="word2vec-google-news-300"`` for the
-    canonical 300-d Google-News *word2vec* vectors (~1.7 GB) without any other
-    change.
+    This is exactly the *"pre-trained Word2Vec"* representation requested by the
+    brief, and the natural counterpart to the in-domain Word2Vec model.
     """
 
-    def __init__(self, model_name: str = "glove-wiki-gigaword-100"):
+    def __init__(self, model_name: str = _PRETRAINED_MODEL):
         self.model_name = model_name
 
     def fit(self, X, y=None):  # noqa: N803 - sklearn naming convention
@@ -191,7 +206,7 @@ class PretrainedEmbeddingVectorizer(BaseEstimator, TransformerMixin):
 
 
 def make_pretrained() -> PretrainedEmbeddingVectorizer:
-    """Factory for :class:`PretrainedEmbeddingVectorizer` (pre-trained GloVe)."""
+    """Factory for :class:`PretrainedEmbeddingVectorizer` (pre-trained Word2Vec)."""
     return PretrainedEmbeddingVectorizer()
 
 
@@ -274,7 +289,7 @@ def make_bert() -> BertVectorizer:
 VECTORIZERS: dict[str, dict] = {
     "BoW": {"factory": make_bow, "dense": False},
     "TF-IDF": {"factory": make_tfidf, "dense": False},
-    "Word2Vec": {"factory": make_word2vec, "dense": True},
-    "GloVe": {"factory": make_pretrained, "dense": True},
+    "Word2Vec": {"factory": make_word2vec, "dense": True},          # trained on our corpus
+    "Word2Vec-pretrained": {"factory": make_pretrained, "dense": True},  # Google-News
     "BERT": {"factory": make_bert, "dense": True},
 }

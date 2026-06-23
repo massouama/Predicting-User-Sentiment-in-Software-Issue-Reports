@@ -170,11 +170,11 @@ def run_main_comparison(save_models: bool = False) -> pd.DataFrame:
     X_train, X_test, y_train, y_test, df = prepare_data()
     run_eda(df)
 
-    # Pre-trained GloVe is included if the vectors can be loaded (downloaded once
-    # via gensim-data); BERT only if its optional deep-learning stack is present.
+    # Pre-trained Word2Vec is included if the vectors can be loaded (downloaded
+    # once via gensim-data); BERT only if its optional deep-learning stack is present.
     vec_names = ["BoW", "TF-IDF", "Word2Vec"]
     if pretrained_available():
-        vec_names.append("GloVe")
+        vec_names.append("Word2Vec-pretrained")
     if bert_available():
         vec_names.append("BERT")
 

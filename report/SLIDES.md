@@ -16,7 +16,7 @@ handling, dimensionality reduction, pruning and early stopping.*
 - **Why it matters:** triage angry reports faster, spot satisfaction trends,
   prioritise fixes.
 - **What we compare:**
-  - 4 vectorisers — Bag-of-Words, TF-IDF, Word2Vec, pre-trained GloVe (+ BERT code)
+  - 4 vectorisers — Bag-of-Words, TF-IDF, Word2Vec (in-domain), pre-trained Word2Vec (+ BERT code)
   - 5 classifiers — Naive Bayes, Decision Tree, Random Forest, AdaBoost, Logistic Regression
 - **And we study:** class imbalance (SMOTE), PCA, tree pruning, early stopping.
 
@@ -47,7 +47,7 @@ raw text → preprocess → vectorise → [balance] → [reduce] → classify �
 
 - **Preprocess:** lower-case, strip punctuation/URLs, tokenise, drop stop-words
   (**keep negations**), WordNet lemmatise.
-- **Vectorise:** BoW · TF-IDF · Word2Vec · pre-trained GloVe.
+- **Vectorise:** BoW · TF-IDF · Word2Vec · pre-trained Word2Vec (Google-News).
 - **Balance (train only):** SMOTE / under-sampling via `imblearn`.
 - **Reduce:** TruncatedSVD (PCA for sparse text).
 - **Classify & tune:** 5 models, 5-fold CV, `GridSearchCV`.
@@ -77,12 +77,12 @@ raw text → preprocess → vectorise → [balance] → [reduce] → classify �
 |---|---|---|
 | **Bag-of-Words** | n-gram counts | sparse, ≥ 0 |
 | **TF-IDF** | counts × inverse document frequency | sparse, ≥ 0 |
-| **Word2Vec** | mean of embeddings trained on our corpus | dense |
-| **GloVe (pre-trained)** | mean of Wikipedia/Gigaword 100-d vectors | dense |
+| **Word2Vec** | mean of embeddings **trained on our corpus** | dense |
+| **Word2Vec-pretrained** | mean of **Google-News** 300-d vectors (the brief's "pre-trained Word2Vec") | dense |
 
 - Sparse + non-negative → feeds **MultinomialNB**; dense → **GaussianNB**.
 - **BERT** vectoriser is implemented & documented; needs the model hub
-  (unavailable here) so it is skipped automatically.
+  (unavailable here) so it is skipped — a Colab-ready script adds it elsewhere.
 
 ---
 
@@ -118,10 +118,10 @@ All tuned with **`GridSearchCV`, 5-fold cross-validation**, scoring **macro-F1**
 |---|---|--:|
 | **TF-IDF** | **Naive Bayes** | **0.559** |
 | BoW | Naive Bayes | 0.548 |
-| Word2Vec | Logistic Regression | 0.537 |
-| GloVe (pre-trained) | Logistic Regression | 0.532 |
+| Word2Vec-pretrained (Google-News) | Random Forest | 0.542 |
+| Word2Vec (in-domain) | Logistic Regression | 0.537 |
 
-*Macro-F1 ≈ 0.46–0.56 (real, noisy data); top 7 are all TF-IDF/BoW. AdaBoost worst. Full 20-row table in the report.*
+*Macro-F1 ≈ 0.46–0.56 (real, noisy data); top 5 are all TF-IDF/BoW. AdaBoost worst. Full 20-row table in the report.*
 
 ![Macro-F1 comparison](../results/figures/comparison_f1.png)
 
@@ -207,7 +207,7 @@ TF-IDF → SVD(100) → Gradient Boosting, ceiling 500 trees, `n_iter_no_change=
 - **Accuracy is a trap** at 64 % positive (baseline never predicts neutral);
   **macro-F1** is the metric that matters.
 - **AdaBoost** is worst (stumps see 1 word of thousands); **embeddings** (Word2Vec,
-  GloVe) sit mid-table — mean-pooling washes out lexical cues.
+  pre-trained Word2Vec) sit mid-table — mean-pooling washes out lexical cues.
 - **SMOTE** rescues minority recall; **PCA** buys efficiency; **pruning & early
   stopping** both curb over-fitting.
 

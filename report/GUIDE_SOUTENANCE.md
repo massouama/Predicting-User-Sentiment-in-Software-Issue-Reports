@@ -12,7 +12,8 @@
 > « On classe le **sentiment** d'avis d'applications (avis Facebook réels, Kaggle)
 > en **négatif / neutre / positif**. On part du **texte brut**, on le **nettoie**
 > (minuscules, ponctuation, lemmatisation), on le transforme en **vecteurs**
-> (Bag-of-Words, TF-IDF, Word2Vec, GloVe), puis on **compare 5 classifieurs**
+> (Bag-of-Words, TF-IDF, Word2Vec entraîné sur nos données **et** Word2Vec
+> pré-entraîné Google-News), puis on **compare 5 classifieurs**
 > (Naive Bayes, arbre de décision, forêt aléatoire, AdaBoost, régression
 > logistique), chacun **réglé par validation croisée 5-fold + GridSearchCV**. On
 > évalue avec **accuracy, précision, rappel, F1 et matrice de confusion**. Le
@@ -89,7 +90,7 @@ src/
   real_data.py       ← Charge les avis, mappe étoiles→sentiment, échantillonne
   data_generation.py ← Générateur synthétique de secours + aiguilleur de source
   preprocessing.py   ← Nettoyage du texte (minuscule, ponctuation, lemmatisation)
-  vectorization.py   ← BoW, TF-IDF, Word2Vec, GloVe, BERT
+  vectorization.py   ← BoW, TF-IDF, Word2Vec, Word2Vec pré-entraîné, BERT
   balancing.py       ← SMOTE et sous-échantillonnage (imbalanced-learn)
   models.py          ← Les 5 classifieurs + leurs grilles d'hyperparamètres
   evaluation.py      ← Métriques (accuracy/precision/recall/F1) + graphiques
@@ -141,8 +142,8 @@ Les modèles ne comprennent que des nombres. On transforme chaque avis en vecteu
 |---|---|---|
 | **Bag-of-Words (BoW)** | compte combien de fois chaque mot apparaît | creux, ≥ 0 |
 | **TF-IDF** | comme BoW, mais **pondère** : un mot rare et discriminant pèse plus qu'un mot omniprésent | creux, ≥ 0 |
-| **Word2Vec** | chaque mot → vecteur dense *appris sur notre corpus* ; on moyenne les mots de l'avis | dense |
-| **GloVe** | idem mais vecteurs **pré-entraînés** (Wikipédia, 400 k mots) | dense |
+| **Word2Vec** | chaque mot → vecteur dense *appris sur nos 5 923 avis* ; on moyenne les mots de l'avis | dense |
+| **Word2Vec-pretrained** | idem mais vecteurs **pré-entraînés** Google News (300-d, 3 M mots) — c'est le *« pre-trained Word2Vec »* exact du sujet | dense |
 | **BERT** | embeddings contextuels (code fourni, optionnel) | dense |
 
 - **TF-IDF** = *Term Frequency × Inverse Document Frequency*. Un mot qui apparaît
@@ -152,10 +153,18 @@ Les modèles ne comprennent que des nombres. On transforme chaque avis en vecteu
   sont non nulles.
 - **n-grammes (1,2)** : on prend les mots seuls *et* les paires ("not good"),
   ce qui capture un peu de contexte.
+- **Deux Word2Vec ?** Oui, et c'est volontaire : le sujet demande le *« pre-trained
+  Word2Vec »* → c'est `Word2Vec-pretrained` (Google News). On garde en plus un
+  Word2Vec **entraîné sur nos avis** pour comparer *pré-entraîné* vs *appris en
+  interne*. Les deux sont l'algorithme Word2Vec (pas GloVe).
 
-> **Pourquoi 4 méthodes ?** Le sujet demande de comparer plusieurs représentations.
-> Conclusion : sur des avis courts, les méthodes **par comptage (TF-IDF/BoW)
-> gagnent** ; les embeddings moyennés "diluent" les mots-clés de sentiment.
+> **Word2Vec vs GloVe (si on te le demande)** : ce sont deux méthodes d'embeddings
+> de mots. Le sujet nomme **Word2Vec** → c'est ce qu'on utilise (Google News). On
+> n'utilise **pas** GloVe pour rester strictement dans le périmètre du sujet.
+>
+> **Pourquoi 4 méthodes ?** Sur des avis courts, les méthodes **par comptage
+> (TF-IDF/BoW) gagnent** ; les embeddings moyennés "diluent" les mots-clés de
+> sentiment.
 
 ### 4.3 Découpage train / test
 On sépare **80 % entraînement / 20 % test**, en **stratifié** (les proportions des
@@ -227,7 +236,7 @@ calcul, sans perte de qualité, et protection contre le surapprentissage.
 | **Régression logistique** | frontière linéaire pondérée, régularisée L2 | solide baseline, calibrée | frontière linéaire seulement |
 
 > **MultinomialNB vs GaussianNB** : MultinomialNB exige des valeurs **positives**
-> (comptages) → parfait pour BoW/TF-IDF. Les embeddings (Word2Vec/GloVe) ont des
+> (comptages) → parfait pour BoW/TF-IDF. Les embeddings (Word2Vec, pré-entraîné ou non) ont des
 > valeurs **négatives** → on bascule **automatiquement** sur GaussianNB. (Bon point
 > à mentionner : "on adapte le modèle à la nature des features".)
 
@@ -349,15 +358,16 @@ dans négatif (22) ou positif (31).
 
 **Points à défendre :**
 1. **TF-IDF + Naive Bayes gagne** : sur du texte court, les comptages pondérés +
-   NB (rapide, robuste en grande dimension) sont difficiles à battre. Le **top 7
+   NB (rapide, robuste en grande dimension) sont difficiles à battre. Le **top 5
    est entièrement TF-IDF/BoW** → les méthodes par comptage dominent les embeddings.
 2. **Scores serrés (0.46–0.56)** : tous les modèles butent sur la **même
    difficulté** — la classe neutre minuscule.
 3. **AdaBoost est dernier (0.46)** : ses souches (1 mot testé à la fois) sont
    inadaptées à un vocabulaire de milliers de mots creux.
-4. **Embeddings (Word2Vec, GloVe) au milieu (0.50–0.54)** : la moyenne des vecteurs
-   "dilue" les mots-clés de sentiment des avis courts ; "pré-entraîné" n'est pas
-   automatiquement "meilleur".
+4. **Embeddings au milieu (0.49–0.54)** : pré-entraîné (Google News) comme
+   in-domaine, la moyenne des vecteurs "dilue" les mots-clés de sentiment des avis
+   courts. Le Word2Vec pré-entraîné fait mieux avec Random Forest (0.542) que le
+   Word2Vec interne → "pré-entraîné" n'est pas automatiquement "meilleur".
 
 **Le résultat le plus marquant — l'expérience de déséquilibre :**
 
@@ -442,13 +452,23 @@ surapprentissage. Réglée par `C` (petit `C` = forte régularisation).
 Ses classifieurs de base sont des "souches" (1 seule décision) ; sur ~4 600 mots
 creux, une souche ne voit qu'un mot → trop faible.
 
-**Q17. Pourquoi les embeddings (Word2Vec/GloVe) déçoivent-ils ?**
+**Q17. Pourquoi les embeddings Word2Vec (pré-entraîné ou interne) déçoivent-ils ?**
 On **moyenne** les vecteurs de mots d'un avis ; sur un texte court, cette moyenne
 dilue les mots-clés forts ("crash", "love"). Les comptages TF-IDF les préservent.
+Le Word2Vec pré-entraîné (Google News) n'est pas meilleur que l'interne ici.
+
+**Q17 bis. Vous avez utilisé GloVe ? Word2Vec ?**
+On utilise **Word2Vec** (le mot exact du sujet), en deux versions : **pré-entraîné**
+sur Google News (le *« pre-trained Word2Vec »* demandé) et entraîné sur nos avis.
+Pas de GloVe — on reste strictement dans le périmètre du sujet.
 
 **Q18. Et BERT ?**
 Le code est fourni (`BertVectorizer`) mais nécessite de télécharger les poids
-(HuggingFace), indisponible dans notre environnement → désactivé proprement.
+(HuggingFace), indisponible dans notre environnement → désactivé proprement. Un
+script prêt à l'emploi (`scripts/run_bert_experiment.py`) l'ajoute à la comparaison
+sur une machine avec accès Internet (ex. Google Colab : `pip install transformers
+torch` puis lancer le script). Le sujet dit *« Try: … BERT »* — c'est une liste
+d'options, pas une obligation, et on en couvre déjà 4.
 
 **Q19. D'où viennent les labels ? Sont-ils fiables ?**
 Des notes 1–5★ (1-2=nég, 3=neutre, 4-5=pos). C'est un proxy standard mais

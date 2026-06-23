@@ -8,9 +8,10 @@
 We build and evaluate a machine-learning pipeline that classifies the sentiment
 of user-reported software issues into **negative**, **neutral** and **positive**.
 The study compares **four text-vectorisation strategies** (Bag-of-Words, TF-IDF,
-corpus-trained Word2Vec, pre-trained GloVe — plus an optional BERT path) against
-**five classifiers** (Naive Bayes, Decision Tree, Random Forest, AdaBoost,
-Logistic Regression), each hyper-parameter-tuned with 5-fold cross-validation. We then study, in dedicated
+and Word2Vec in two forms — trained on our corpus *and* pre-trained on Google-News
+— plus an optional BERT path) against **five classifiers** (Naive Bayes, Decision
+Tree, Random Forest, AdaBoost, Logistic Regression), each hyper-parameter-tuned
+with 5-fold cross-validation. We then study, in dedicated
 experiments, class-imbalance handling, dimensionality reduction, decision-tree
 pruning and early stopping.
 
@@ -98,18 +99,22 @@ Lower-casing → URL/HTML/punctuation stripping → tokenisation → stop-word r
 |---|---|---|
 | **Bag-of-Words** | n-gram counts (1–2-grams, ≤5 000 features) | sparse, non-negative |
 | **TF-IDF** | counts re-weighted by inverse document frequency, sublinear TF | sparse, non-negative |
-| **Word2Vec** | mean of 100-d embeddings trained on the training corpus | dense |
-| **GloVe** *(pre-trained)* | mean of 100-d Wikipedia+Gigaword vectors (400 k vocab) | dense |
+| **Word2Vec** | mean of 100-d embeddings **trained on our corpus** | dense |
+| **Word2Vec-pretrained** | mean of the 300-d **Google-News** word2vec vectors | dense |
 | **BERT** *(optional)* | mean-pooled contextual embeddings | requires `transformers`+`torch` |
 
-GloVe gives us a genuinely **pre-trained** embedding (loaded via gensim-data); the
-same vectoriser switches to the canonical 300-d Google-News *word2vec* vectors by
-changing one argument.
+The brief asks specifically for *"pre-trained Word2Vec"*: that is
+`Word2Vec-pretrained`, the canonical 300-d **Google-News** vectors (3 M words),
+loaded via gensim-data. We keep the in-domain `Word2Vec` alongside it so the report
+can contrast *pre-trained* against *trained-on-our-data* embeddings. To bound
+memory, only the 500 k most frequent Google-News words are loaded (ample for short
+reviews).
 
 > **BERT** is implemented in full (`BertVectorizer`) but needs the optional
 > deep-learning stack and network access to the model hub. Where those are
 > unavailable it is skipped automatically and the experiments use BoW / TF-IDF /
-> Word2Vec / GloVe.
+> Word2Vec / Word2Vec-pretrained. A ready-to-run `scripts/run_bert_experiment.py`
+> adds BERT to the comparison on any machine where the hub is reachable (e.g. Colab).
 
 ### 3.3 Classifiers ([`src/models.py`](../src/models.py))
 
@@ -155,21 +160,21 @@ Test-set results (held-out 20 %), sorted by macro-F1:
 | 3 | TF-IDF | Random Forest | 0.541 | 0.824 | 0.540 | 0.558 | 0.548 |
 | 4 | BoW | Naive Bayes | 0.569 | 0.817 | 0.542 | 0.554 | 0.548 |
 | 5 | BoW | Logistic Regression | 0.561 | 0.806 | 0.550 | 0.545 | 0.546 |
-| 6 | BoW | Decision Tree | 0.533 | 0.768 | 0.547 | 0.533 | 0.539 |
-| 7 | BoW | Random Forest | 0.542 | 0.810 | 0.534 | 0.542 | 0.537 |
-| 8 | Word2Vec | Logistic Regression | 0.532 | 0.810 | 0.527 | 0.547 | 0.537 |
-| 9 | GloVe | Logistic Regression | 0.537 | 0.800 | 0.521 | 0.543 | 0.532 |
-| 10 | Word2Vec | Random Forest | 0.539 | 0.801 | 0.520 | 0.542 | 0.530 |
-| 11 | GloVe | Random Forest | 0.531 | 0.805 | 0.532 | 0.531 | 0.528 |
+| 6 | Word2Vec-pretrained | Random Forest | 0.535 | 0.821 | 0.542 | 0.545 | 0.542 |
+| 7 | BoW | Decision Tree | 0.533 | 0.768 | 0.547 | 0.533 | 0.539 |
+| 8 | BoW | Random Forest | 0.542 | 0.810 | 0.534 | 0.542 | 0.537 |
+| 9 | Word2Vec | Logistic Regression | 0.532 | 0.810 | 0.527 | 0.547 | 0.537 |
+| 10 | Word2Vec-pretrained | Logistic Regression | 0.558 | 0.802 | 0.525 | 0.544 | 0.535 |
+| 11 | Word2Vec | Random Forest | 0.539 | 0.801 | 0.520 | 0.542 | 0.530 |
 | 12 | TF-IDF | Decision Tree | 0.527 | 0.784 | 0.578 | 0.530 | 0.528 |
 | 13 | Word2Vec | Naive Bayes | 0.517 | 0.685 | 0.542 | 0.537 | 0.518 |
 | 14 | Word2Vec | AdaBoost | 0.518 | 0.780 | 0.503 | 0.531 | 0.516 |
-| 15 | GloVe | AdaBoost | 0.520 | 0.774 | 0.500 | 0.516 | 0.508 |
+| 15 | Word2Vec-pretrained | AdaBoost | 0.527 | 0.783 | 0.506 | 0.527 | 0.516 |
 | 16 | Word2Vec | Decision Tree | 0.533 | 0.763 | 0.496 | 0.514 | 0.505 |
-| 17 | GloVe | Decision Tree | 0.503 | 0.726 | 0.504 | 0.498 | 0.501 |
-| 18 | GloVe | Naive Bayes | 0.459 | 0.678 | 0.504 | 0.518 | 0.497 |
-| 19 | TF-IDF | AdaBoost | 0.459 | 0.757 | 0.512 | 0.471 | 0.472 |
-| 20 | BoW | AdaBoost | 0.454 | 0.753 | 0.516 | 0.463 | 0.465 |
+| 17 | Word2Vec-pretrained | Decision Tree | 0.506 | 0.746 | 0.483 | 0.504 | 0.493 |
+| 18 | TF-IDF | AdaBoost | 0.459 | 0.757 | 0.512 | 0.471 | 0.472 |
+| 19 | BoW | AdaBoost | 0.454 | 0.753 | 0.516 | 0.463 | 0.465 |
+| 20 | Word2Vec-pretrained | Naive Bayes | 0.444 | 0.630 | 0.465 | 0.479 | 0.455 |
 
 ![Macro-F1 comparison](../results/figures/comparison_f1.png)
 
@@ -193,10 +198,12 @@ three classes equally) is the metric that matters**, and it sits around 0.46–0
   model struggles equally with the tiny neutral class.
 - **AdaBoost is worst (0.46–0.47)**: its depth-1 stumps can each test only one word
   out of thousands; the dense embeddings help it only marginally.
-- **Embeddings (Word2Vec, GloVe) sit mid-table (0.50–0.54).** Mean-pooled vectors
-  wash out the specific lexical cues ("crash", "love", "buggy") short reviews live
-  on; Gaussian NB on GloVe is near the bottom (0.497). A clear
-  reminder that *pre-trained is not automatically better* than in-domain features.
+- **Embeddings sit mid-table (0.49–0.54).** Both the **pre-trained Word2Vec**
+  (Google-News, 300-d) and the **in-domain Word2Vec** mean-pool their word vectors,
+  which washes out the specific lexical cues ("crash", "love", "buggy") short
+  reviews live on. Pre-trained Word2Vec does best with Random Forest (0.542) but
+  worst with Gaussian NB (0.455) — a reminder that *pre-trained is not automatically
+  better* than in-domain features, and that the classifier must match the geometry.
 - **Scores are far lower and tighter than on clean/synthetic data** — the honest
   signature of a real, noisy, severely imbalanced corpus with proxy (star-derived)
   labels.
@@ -313,14 +320,14 @@ would bring. (The SVD reduction from §7 is what makes boosting on text efficien
 | Multinomial vs Gaussian NB by feature type | NB assumptions must match the data | none (handled automatically) |
 | Logistic Regression with L2 | strong, robust, regularised baseline | linear decision boundary |
 | TruncatedSVD not PCA | avoids densifying sparse TF-IDF | loses exact feature interpretability |
-| Pre-trained GloVe | tests transfer from general text | mid-table: mean-pooling washes out review-specific cues |
+| Pre-trained Word2Vec (Google-News) | the brief's requested embedding; tests transfer from general text | mid-table: mean-pooling washes out review-specific cues |
 | **Macro-F1 as the metric** | the 64 % positive skew makes accuracy meaningless | must be read alongside accuracy |
 | **SMOTE inside an `imblearn` pipeline** | rescues zero minority recall, leakage-free | lowers majority accuracy |
 | Preprocess once + cache vectorisers | whole study in ~8 min | a few hundred MB of disk cache |
 
 **Headline findings.** (1) Simple sparse models win — **TF-IDF + Naive Bayes (0.559
-macro-F1)** edges out every embedding/ensemble on short, noisy review text, with the
-top seven all TF-IDF/BoW. (2) On a 64 %-positive corpus **accuracy (0.84) is a
+macro-F1)** edges out every embedding/ensemble on short, noisy review text; the top
+five are all TF-IDF/BoW. (2) On a 64 %-positive corpus **accuracy (0.84) is a
 trap**: the untreated baseline never predicts the neutral class at all. (3) **SMOTE
 is decisive**, lifting `neutral` recall from 0.000 to 0.189 (under-sampling to
 0.472) for almost no macro-F1 cost. (4) Boosting and embeddings underperform —
@@ -345,7 +352,8 @@ curb over-fitting.
   solved with stateless-preprocessing-once + a shared `joblib` vectoriser cache.
 - **BERT weights unreachable** behind the network policy → a complete BERT
   vectoriser is provided but gracefully skipped, with the other four vectorisers
-  (BoW, TF-IDF, Word2Vec, pre-trained GloVe) carrying the comparison.
+  (BoW, TF-IDF, Word2Vec, pre-trained Word2Vec) carrying the comparison; a
+  Colab-ready `scripts/run_bert_experiment.py` adds BERT where the hub is reachable.
 
 ---
 

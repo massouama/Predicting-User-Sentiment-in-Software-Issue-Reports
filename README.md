@@ -72,7 +72,7 @@ raw text
    ▼  clean → tokenise → drop stop-words (keep negations) → WordNet lemmatise
 cleaned text
    │  src/vectorization.py
-   ▼  Bag-of-Words │ TF-IDF │ Word2Vec │ GloVe (pre-trained) │ BERT (optional)
+   ▼  Bag-of-Words │ TF-IDF │ Word2Vec │ Word2Vec-pretrained (Google-News) │ BERT (optional)
 feature matrix
    │  src/balancing.py        (SMOTE / under-sampling, train folds only)
    │  TruncatedSVD            (PCA-equivalent reduction, optional)
@@ -106,7 +106,7 @@ metrics + confusion matrices + figures
 |---|---|
 | Pre-cleaned dataset (Facebook app reviews) | `src/real_data.py` |
 | Cleaning, lemmatisation, stop-words | `src/preprocessing.py` |
-| BoW, TF-IDF, Word2Vec, GloVe (pre-trained), BERT | `src/vectorization.py` |
+| BoW, TF-IDF, Word2Vec, **pre-trained Word2Vec** (Google-News), BERT | `src/vectorization.py` |
 | SMOTE / under-sampling | `src/balancing.py`, `experiment_imbalance` |
 | ≥3 classifiers (NB, Decision Tree, ensembles) | `src/models.py` |
 | 5-fold cross-validation + GridSearchCV tuning | `src/experiment.py` |
@@ -119,7 +119,8 @@ metrics + confusion matrices + figures
 > **BERT note.** A complete, documented `BertVectorizer` is provided. It needs the
 > optional `transformers` + `torch` packages *and* network access to the model
 > hub; where those are unavailable the experiments use BoW / TF-IDF / Word2Vec /
-> GloVe and BERT is skipped automatically.
+> pre-trained Word2Vec, and BERT is skipped automatically. `scripts/run_bert_experiment.py`
+> adds BERT to the comparison wherever the hub is reachable (e.g. Colab).
 
 ---
 
@@ -137,7 +138,7 @@ metrics + confusion matrices + figures
 │   ├── real_data.py        # real review loaders (Facebook / Google Play)
 │   ├── data_generation.py  # synthetic generator (offline fallback)
 │   ├── preprocessing.py     # text cleaning / lemmatisation
-│   ├── vectorization.py     # BoW / TF-IDF / Word2Vec / GloVe / BERT
+│   ├── vectorization.py     # BoW / TF-IDF / Word2Vec / pre-trained Word2Vec / BERT
 │   ├── balancing.py         # SMOTE / under-sampling
 │   ├── models.py            # classifiers + hyper-parameter grids
 │   ├── evaluation.py        # metrics + figures
