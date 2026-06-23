@@ -1,0 +1,227 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[french]{babel}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{primary}{HTML}{1F3B6E}
+\definecolor{accent}{HTML}{E26D3C}
+\definecolor{yann}{HTML}{1F3B6E}
+\definecolor{venus}{HTML}{2E7D5B}
+\definecolor{faical}{HTML}{B5482A}
+\definecolor{panel}{HTML}{F3F6FB}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.4em}
+
+% Un tour de parole : étiquette colorée du présentateur, puis le texte à dire.
+\newenvironment{turn}[2]%
+{\begin{mdframed}[linewidth=0pt,backgroundcolor=panel,skipabove=6pt,skipbelow=6pt,
+   innerleftmargin=10pt,innerrightmargin=10pt,innertopmargin=7pt,innerbottommargin=7pt,
+   leftline=true,linecolor=#1,linewidth=3pt]%
+ {\color{#1}\bfseries #2}\par\vspace{2pt}}
+{\end{mdframed}}
+
+\begin{document}
+
+% ----------------------------- Titre ----------------------------------
+\begin{center}
+{\color{primary}\LARGE\bfseries Script de présentation orale}\\[4pt]
+{\large Predicting User Sentiment in Software Issue Reports}\\[10pt]
+{\large\bfseries Yann MASSOUAM \quad$\cdot$\quad Vénus BAKIKO \quad$\cdot$\quad Faïçal DIELO}\\[4pt]
+{ST2MLE : Machine Learning for IT Engineers}
+\end{center}
+
+\vspace{0.4cm}
+{\color{accent}\rule{\linewidth}{1.2pt}}
+
+\textbf{Mode d'emploi.} Ce document répartit le pitch entre les trois présentateurs,
+slide par slide. Chaque bloc coloré indique qui parle et le texte à dire. Durée visée :
+environ 18 à 20 minutes, soit à peu près une minute par slide. Les mêmes textes sont
+disponibles dans les notes du présentateur du fichier PowerPoint.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Présentateur} & \textbf{Slides} & \textbf{Partie} \\
+\midrule
+\textcolor{yann}{\textbf{Yann MASSOUAM}}  & 1 à 6   & Introduction, données et début de la chaîne \\
+\textcolor{venus}{\textbf{Vénus BAKIKO}}  & 7 à 12  & Vectorisation, modèles, métriques et résultats \\
+\textcolor{faical}{\textbf{Faïçal DIELO}} & 13 à 18 & Réglages, conclusion et perspectives \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================ YANN ====================================
+\section*{\textcolor{yann}{Partie 1 : Yann MASSOUAM (slides 1 à 6)}}
+
+\begin{turn}{yann}{Slide 1 : Page de titre}
+Bonjour à tous. Nous sommes Yann, Vénus et Faïçal, et nous vous présentons notre projet
+de Machine Learning : prédire le sentiment d'avis d'utilisateurs sur des applications,
+en trois classes, négatif, neutre et positif. En une vingtaine de minutes, nous allons
+montrer comment, à partir d'un simple texte d'avis, on construit une chaîne complète qui
+nettoie, transforme, entraîne et évalue plusieurs modèles, puis nous expliquerons
+pourquoi certains choix comptent vraiment.
+\end{turn}
+
+\begin{turn}{yann}{Slide 2 : Plan}
+Voici notre fil conducteur. On part du problème, puis des données, puis on déroule la
+chaîne de traitement de gauche à droite. On insiste sur deux idées fortes : la
+vectorisation, c'est à dire le passage du texte aux nombres, et les métriques, parce que
+sur ce projet une bonne exactitude peut cacher un modèle qui ne fonctionne pas. On
+termine par les réglages classiques et la conclusion.
+\end{turn}
+
+\begin{turn}{yann}{Slide 3 : Le problème}
+Le but est concret : à partir du texte d'un avis, prédire automatiquement s'il est
+négatif, neutre ou positif. C'est de l'apprentissage supervisé, car chaque avis
+d'entraînement possède déjà une étiquette. L'intérêt pratique est réel : sur une
+application qui reçoit des milliers d'avis, on veut repérer vite les mécontents, suivre
+la satisfaction, et éviter de tout lire à la main.
+\end{turn}
+
+\begin{turn}{yann}{Slide 4 : Les données}
+Point important : nous n'utilisons pas de données inventées, mais de vrais avis Facebook
+téléchargés sur Kaggle. Chaque avis a une note de une à cinq étoiles que l'on transforme
+en sentiment : une ou deux étoiles, c'est négatif, trois, c'est neutre, quatre ou cinq,
+c'est positif. On supprime les doublons de texte pour éviter qu'un même avis se retrouve
+à la fois en entraînement et en test. Il reste 5\,923 avis. Regardez le déséquilibre :
+deux tiers d'avis positifs et seulement 4,5 pour cent de neutres. Ce déséquilibre sera au
+cœur de notre analyse.
+\end{turn}
+
+\begin{turn}{yann}{Slide 5 : La chaîne de traitement}
+Voici la chaîne complète, à lire de gauche à droite. On part du texte brut, on le
+nettoie, on le transforme en nombres, on peut rééquilibrer les classes et réduire la
+dimension, puis on entraîne un modèle réglé, et enfin on évalue. Deux choix
+d'ingénierie : on nettoie une seule fois car cette étape n'apprend rien, ce qui rend
+tout plus rapide, et l'équilibrage comme la réduction ne touchent que l'entraînement,
+jamais le test, pour que nos résultats restent honnêtes.
+\end{turn}
+
+\begin{turn}{yann}{Slide 6 : Prétraitement}
+Le prétraitement suit la séquence classique : minuscules, retrait de la ponctuation, des
+URL et des chiffres, puis tokenisation et suppression des mots vides. Deux finesses à
+retenir. On conserve les négations, car not good et good ont des sens opposés. Et la
+lemmatisation regroupe les formes d'un mot, crashing et crash deviennent le même mot, ce
+qui réduit le vocabulaire. Je passe la parole à Vénus pour la vectorisation.
+\end{turn}
+
+% ============================ VENUS ===================================
+\section*{\textcolor{venus}{Partie 2 : Vénus BAKIKO (slides 7 à 12)}}
+
+\begin{turn}{venus}{Slide 7 : Vectorisation}
+Merci Yann. Les modèles ne comprennent que des nombres, il faut donc transformer le
+texte. On compare quatre représentations demandées par le sujet. Bag-of-Words compte les
+mots. TF-IDF fait pareil mais valorise les mots rares et discriminants. Word2Vec
+représente chaque mot par un vecteur dense, et on en a deux versions, une entraînée sur
+nos avis et une pré-entraînée sur Google News, qui est exactement le pre-trained Word2Vec
+du sujet. Détail utile : Naive Bayes multinomial exige des valeurs positives, donc pour
+les embeddings on passe à la version gaussienne.
+\end{turn}
+
+\begin{turn}{venus}{Slide 8 : Les cinq modèles}
+Nous comparons cinq classifieurs, du plus simple au plus riche. Naive Bayes suppose les
+mots indépendants, c'est faux mais très efficace, et ce sera notre gagnant. L'arbre de
+décision est lisible mais surapprend, d'où l'élagage. La forêt aléatoire moyenne
+beaucoup d'arbres. AdaBoost combine des souches, mais sur du texte creux il est faible.
+La régression logistique est une référence solide avec régularisation. Tous sont réglés
+par validation croisée en cinq blocs et recherche sur grille.
+\end{turn}
+
+\begin{turn}{venus}{Slide 9 : Les métriques}
+Quatre mots à maîtriser. L'exactitude est la proportion globale de bonnes réponses, mais
+elle trompe quand une classe domine. La précision répond à : quand le modèle annonce une
+classe, a-t-il raison. Le rappel répond à : parmi les vrais cas, combien sont retrouvés.
+Le F1 combine les deux. Et le macro-F1 fait la moyenne des F1 des trois classes à
+égalité, donc rater la classe rare coûte cher. C'est pour cela qu'on règle sur le
+macro-F1.
+\end{turn}
+
+\begin{turn}{venus}{Slide 10 : Résultats}
+Voici la comparaison de toutes les combinaisons. Le meilleur est TF-IDF avec Naive Bayes,
+à 0,559 de macro-F1. Le tableau donne le meilleur modèle pour chaque vectoriseur. Deux
+observations : les cinq premiers sont tous des méthodes par comptage, ce qui est logique
+sur des avis courts, et AdaBoost est dernier car ses souches ne voient qu'un mot à la
+fois. Les scores sont serrés autour de 0,5, car tous butent sur la même difficulté.
+\end{turn}
+
+\begin{turn}{venus}{Slide 11 : Le piège de l'exactitude}
+Ce slide est le cœur de notre message. Notre meilleur modèle affiche 84 pour cent
+d'exactitude, ce qui paraît excellent. Mais la colonne neutre de la matrice de confusion
+est entièrement vide : le modèle ne prédit jamais la classe neutre. Les 53 vrais avis
+neutres sont tous classés en négatif ou positif. Le macro-F1 chute à 0,56 et révèle ce
+problème. La leçon : sur des données déséquilibrées, l'exactitude ment, il faut regarder
+le macro-F1 et le rappel par classe.
+\end{turn}
+
+\begin{turn}{venus}{Slide 12 : Le déséquilibre}
+On attaque le déséquilibre. Sans traitement, le rappel de la classe neutre est exactement
+zéro : la minorité est ignorée. SMOTE génère des exemples neutres synthétiques et fait
+remonter ce rappel de zéro à 0,19. Le sous-échantillonnage va plus loin, à 0,47, mais en
+jetant des données. Le rééquilibrage échange donc de l'exactitude contre une vraie
+reconnaissance de la classe rare. Je laisse Faïçal pour les réglages et la conclusion.
+\end{turn}
+
+% ============================ FAICAL ==================================
+\section*{\textcolor{faical}{Partie 3 : Faïçal DIELO (slides 13 à 18)}}
+
+\begin{turn}{faical}{Slide 13 : Réduction de dimension}
+Merci Vénus. La réduction de dimension. Notre matrice TF-IDF a environ 4\,600 colonnes.
+On utilise TruncatedSVD, l'équivalent de la PCA adapté aux données creuses. Le résultat
+est net : avec seulement 300 composantes, soit 6,5 pour cent des colonnes, on conserve
+quasiment toute la performance. C'est un excellent compromis vitesse mémoire, et c'est
+même indispensable avant un modèle dense comme le gradient boosting.
+\end{turn}
+
+\begin{turn}{faical}{Slide 14 : Élagage de l'arbre}
+L'élagage de l'arbre de décision. Un arbre laissé libre construit 1\,857 nœuds et
+mémorise les données : 0,98 en entraînement mais 0,76 en test, donc il surapprend. En
+élaguant, on réduit l'arbre à 69 nœuds et la performance de test monte à 0,79, tout en
+réduisant l'écart entre entraînement et test. Si on élague trop, vers 29 nœuds, l'arbre
+sous-apprend. C'est l'illustration concrète du compromis biais variance.
+\end{turn}
+
+\begin{turn}{faical}{Slide 15 : Arrêt précoce}
+L'arrêt précoce pour le gradient boosting, un modèle qui ajoute des arbres un par un. On
+autorise jusqu'à 500 arbres, mais on surveille une part de validation et on arrête dès
+que la performance ne progresse plus. Ici l'arrêt survient à 88 arbres sur 500, soit
+environ six fois moins de calcul, sans perte de qualité, et une protection contre le
+surapprentissage.
+\end{turn}
+
+\begin{turn}{faical}{Slide 16 : Conclusion}
+Pour conclure. Nous avons construit une chaîne complète et reproductible sur de vrais
+avis Facebook, comparé quatre représentations du texte et cinq modèles, tous réglés par
+validation croisée. Le meilleur est TF-IDF avec Naive Bayes à 0,559 de macro-F1. La leçon
+principale est méthodologique : sur un jeu déséquilibré, l'exactitude trompe, et c'est le
+macro-F1 qui dit la vérité. SMOTE est ce qui permet à la classe minoritaire d'exister.
+\end{turn}
+
+\begin{turn}{faical}{Slide 17 : Limites et perspectives}
+Soyons honnêtes sur les limites. Nos étiquettes viennent des étoiles, c'est un signal
+approximatif. La classe neutre est minuscule et ambiguë. Et le texte est court, bruité et
+parfois dans une autre langue. Côté perspectives, on peut activer BERT grâce au script
+que nous fournissons, essayer la pondération des classes et des seuils ajustés, et
+collecter de vraies issues GitHub ou JIRA.
+\end{turn}
+
+\begin{turn}{faical}{Slide 18 : Remerciements}
+Merci de votre attention. Nous sommes maintenant prêts à répondre à vos questions. Pour
+les questions sur les métriques, pensez au macro-F1 et au rappel par classe. Pour celles
+sur le déséquilibre, pensez à SMOTE.
+\end{turn}
+
+\vspace{0.3cm}
+{\color{accent}\rule{\linewidth}{1.2pt}}
+\begin{center}\small\textcolor{primary}{Bonne présentation à tous les trois.}\end{center}
+
+\end{document}

@@ -26,3 +26,9 @@ data/reviews_raw.csv
 
 # NLTK data downloaded at runtime
 nltk_data/
+
+# LaTeX auxiliary files
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc

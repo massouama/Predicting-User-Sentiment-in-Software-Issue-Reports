@@ -23,9 +23,12 @@ seaborn>=0.13
 # --- Persistence ---
 joblib>=1.3
 
-# --- Report generation (Markdown -> PDF) ---
-markdown>=3.5              # scripts/build_report_pdf.py
+# --- Report / slides generation ---
+markdown>=3.5              # scripts/build_report_pdf.py (Markdown -> PDF)
 weasyprint>=60             # scripts/build_report_pdf.py
+python-pptx>=1.0           # scripts/build_pptx.py (PowerPoint deck)
+# The LaTeX reports (report/*.tex) need a TeX distribution (e.g. texlive) with
+# pdflatex; this is a system package, not a pip dependency.
 
 # ---------------------------------------------------------------------------
 # OPTIONAL (BERT vectoriser). Not required to run the experiments; the code
