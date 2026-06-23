@@ -39,28 +39,28 @@ python scripts/build_report_pdf.py     # -> report/REPORT.pdf
 
 ## 2. The dataset
 
-By default the project uses a **real, pre-cleaned app-review dataset** — the
-*"App Store reviews"* option of the brief. It is the Google Play review collection
-from the open research repo
-[`sealuzh/user_quality`](https://github.com/sealuzh/user_quality) (288 k reviews,
-395 apps), fetched credential-free by [`src/real_data.py`](src/real_data.py). Star
-ratings are mapped to sentiment (1–2★ → negative, 3★ → neutral, 4–5★ → positive),
-and a reproducible **class-stratified sample of 6 000** reviews is kept:
+By default the project uses a **real, pre-cleaned review dataset** — the *"App
+Store reviews"* option of the brief: a Kaggle export of **Facebook app reviews**
+(`content` + 1–5 `score`), bundled at
+[`data/facebook_reviews.csv`](data/facebook_reviews.csv) and loaded by
+[`src/real_data.py`](src/real_data.py). Scores map to sentiment (1–2★ → negative,
+3★ → neutral, 4–5★ → positive). After de-duplicating the review text (so identical
+strings can't leak across the split) **5 923 unique reviews** remain:
 
 | Class | From | Share |
 |-------|------|-------|
-| `negative` | 1–2 ★ | ~21 % |
-| `neutral`  | 3 ★ | ~9 % |
-| `positive` | 4–5 ★ | ~70 % |
+| `negative` | 1–2 ★ | ~31 % |
+| `neutral`  | 3 ★ | ~5 % |
+| `positive` | 4–5 ★ | ~64 % |
 
 The strong, natural positive skew is what motivates the SMOTE / under-sampling
-experiment, and 3★ "neutral" reviews genuinely overlap their neighbours — a real,
-non-trivial learning problem.
+experiment, and the tiny 3★ "neutral" class genuinely overlaps its neighbours — a
+real, non-trivial learning problem.
 
-> **Offline fallback.** A reproducible **synthetic generator**
-> ([`src/data_generation.py`](src/data_generation.py)) is also bundled; set
-> `DATASET_SOURCE = "synthetic"` in [`config.py`](config.py) to use it. The rest
-> of the pipeline is identical either way.
+> **Other sources.** `config.DATASET_SOURCE` also selects the Google Play
+> `sealuzh/user_quality` corpus (`"app_reviews"`, 288 k reviews, downloaded on
+> demand) or a reproducible **synthetic generator** (`"synthetic"`, offline
+> fallback). The pipeline is identical for all three.
 
 ---
 
@@ -104,7 +104,7 @@ metrics + confusion matrices + figures
 
 | Brief requirement | Where |
 |---|---|
-| Pre-cleaned dataset (App Store reviews) | `src/real_data.py` |
+| Pre-cleaned dataset (Facebook app reviews) | `src/real_data.py` |
 | Cleaning, lemmatisation, stop-words | `src/preprocessing.py` |
 | BoW, TF-IDF, Word2Vec, GloVe (pre-trained), BERT | `src/vectorization.py` |
 | SMOTE / under-sampling | `src/balancing.py`, `experiment_imbalance` |
@@ -131,9 +131,10 @@ metrics + confusion matrices + figures
 ├── main.py                 # runs the full study end to end
 ├── requirements.txt
 ├── data/
-│   └── issue_sentiment.csv # cached, reproducible corpus
+│   ├── facebook_reviews.csv # real Facebook reviews (default source)
+│   └── issue_sentiment.csv  # cached processed corpus
 ├── src/
-│   ├── real_data.py        # real app-review loader (default dataset)
+│   ├── real_data.py        # real review loaders (Facebook / Google Play)
 │   ├── data_generation.py  # synthetic generator (offline fallback)
 │   ├── preprocessing.py     # text cleaning / lemmatisation
 │   ├── vectorization.py     # BoW / TF-IDF / Word2Vec / GloVe / BERT

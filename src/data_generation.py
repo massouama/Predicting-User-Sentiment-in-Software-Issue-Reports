@@ -252,8 +252,12 @@ def load_or_create_dataset(path=config.DATASET_PATH, **kwargs) -> pd.DataFrame:
         return pd.read_csv(path)
 
     config.ensure_directories()
-    if config.DATASET_SOURCE == "app_reviews":
-        from src.real_data import build_app_reviews_dataset  # lazy: avoids a hard dep
+    if config.DATASET_SOURCE == "facebook":
+        from src.real_data import build_facebook_reviews_dataset  # lazy import
+
+        df = build_facebook_reviews_dataset()
+    elif config.DATASET_SOURCE == "app_reviews":
+        from src.real_data import build_app_reviews_dataset
 
         df = build_app_reviews_dataset()
     else:
