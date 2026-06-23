@@ -1,8 +1,9 @@
-"""Render ``report/REPORT.md`` to a polished ``report/REPORT.pdf``.
+"""Render a Markdown document under ``report/`` to a polished PDF.
 
-The brief asks for a PDF report; this converts the Markdown source (the single
-maintained document) into a print-ready PDF with the figures embedded and the
-comparison tables styled.
+The brief asks for a PDF report; this converts a Markdown source into a
+print-ready PDF with the figures embedded and the tables styled. It defaults to
+``report/REPORT.md`` but accepts any Markdown file, so it also builds the
+soutenance guide.
 
 Pipeline: Markdown -> HTML (``markdown`` with table/code extensions) -> PDF
 (``weasyprint``).  Relative image links such as ``../results/figures/x.png`` are
@@ -11,7 +12,8 @@ resolved against the ``report/`` directory via WeasyPrint's ``base_url``.
 Usage::
 
     pip install markdown weasyprint
-    python scripts/build_report_pdf.py
+    python scripts/build_report_pdf.py                       # -> report/REPORT.pdf
+    python scripts/build_report_pdf.py report/GUIDE_SOUTENANCE.md
 """
 from __future__ import annotations
 
@@ -24,8 +26,6 @@ import markdown  # noqa: E402
 from weasyprint import HTML  # noqa: E402
 
 REPORT_DIR = Path(__file__).resolve().parents[1] / "report"
-MD_PATH = REPORT_DIR / "REPORT.md"
-PDF_PATH = REPORT_DIR / "REPORT.pdf"
 
 # Minimal, print-oriented stylesheet: A4 pages, readable type, bordered tables
 # and figures that never overflow the page width.
@@ -49,18 +49,22 @@ blockquote { border-left: 4px solid #ccc; margin-left: 0; padding-left: 12px; co
 """
 
 
-def build() -> Path:
-    """Convert the Markdown report to PDF and return the output path."""
+def build(md_path: Path) -> Path:
+    """Convert a Markdown file to a sibling PDF and return the output path."""
+    md_path = Path(md_path)
+    pdf_path = md_path.with_suffix(".pdf")
     html_body = markdown.markdown(
-        MD_PATH.read_text(encoding="utf-8"),
+        md_path.read_text(encoding="utf-8"),
         extensions=["tables", "fenced_code", "sane_lists"],
     )
     html_doc = f"<html><head><meta charset='utf-8'><style>{_CSS}</style></head><body>{html_body}</body></html>"
     # base_url = report/ so that '../results/...' image links resolve correctly.
-    HTML(string=html_doc, base_url=str(REPORT_DIR)).write_pdf(str(PDF_PATH))
-    return PDF_PATH
+    HTML(string=html_doc, base_url=str(REPORT_DIR)).write_pdf(str(pdf_path))
+    return pdf_path
 
 
 if __name__ == "__main__":
-    out = build()
+    src = Path(sys.argv[1]) if len(sys.argv) > 1 else REPORT_DIR / "REPORT.md"
+    out = build(src)
     print(f"Wrote {out}  ({out.stat().st_size // 1024} KB)")
+
