@@ -1,0 +1,195 @@
+\documentclass[10.5pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage[french]{babel}
+\usepackage[margin=1.7cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{primary}{HTML}{1F3B6E}
+\definecolor{accent}{HTML}{E26D3C}
+\definecolor{green}{HTML}{2E7D5B}
+\definecolor{red}{HTML}{C04432}
+\definecolor{panel}{HTML}{F1F4F9}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.35em}
+\renewcommand{\arraystretch}{1.1}
+
+% Section title helper
+\newcommand{\sect}[1]{\vspace{0.3em}{\color{primary}\large\bfseries #1}\\[-0.4em]
+  {\color{accent}\rule{\linewidth}{1pt}}\par}
+
+% Highlight box
+\newenvironment{keybox}[1]
+{\begin{mdframed}[backgroundcolor=panel,linecolor=accent,linewidth=2pt,
+   innerleftmargin=8pt,innerrightmargin=8pt,innertopmargin=6pt,innerbottommargin=6pt,
+   skipabove=4pt,skipbelow=4pt]{\color{primary}\bfseries #1}\par\vspace{2pt}}
+{\end{mdframed}}
+
+\begin{document}
+
+\begin{center}
+{\color{primary}\LARGE\bfseries Fiche de révision : SMOTE, validation croisée, élagage}\\[2pt]
+{\small Predicting User Sentiment in Software Issue Reports \quad$\cdot$\quad Yann MASSOUAM, Vénus BAKIKO, Faïçal DIELO}
+\end{center}
+\vspace{0.2em}
+
+% =====================================================================
+\sect{1. SMOTE et le rééchantillonnage (régler le déséquilibre)}
+
+\textbf{Le problème.} Nos avis sont très déséquilibrés : $\sim$64\,\% positifs, $\sim$31\,\% négatifs, mais seulement $\sim$4,5\,\% neutres. Le modèle apprend qu'il a presque toujours raison en ignorant le neutre.
+
+\textbf{Image : une classe de fête avec très peu d'invités « neutres ».} Deux façons d'équilibrer la salle :
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item \textbf{SMOTE} (\emph{Synthetic Minority Over-sampling}) : on \textbf{fabrique de nouveaux neutres synthétiques}. On prend un avis neutre, un de ses voisins neutres proches ($k=5$ voisins), et on crée un point « entre les deux » (interpolation). On ne copie pas bêtement : on invente des exemples plausibles entre des vrais.
+\item \textbf{Sous-échantillonnage} : on \textbf{retire des positifs} (la classe majoritaire) jusqu'à rééquilibrer. Simple, mais on jette de l'information.
+\end{itemize}
+
+\begin{keybox}{La règle d'or anti-fuite}
+Le rééchantillonnage se fait \textbf{uniquement sur l'entraînement}, jamais sur le test. On l'a mis \emph{dans} un pipeline \texttt{imblearn}, donc à chaque pli de validation croisée, SMOTE ne voit que les données d'entraînement de ce pli. Sinon on évaluerait sur des points inventés $\Rightarrow$ score truqué.
+\end{keybox}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Stratégie & Accuracy & Macro-F1 & \textbf{Rappel neutre} \\
+\midrule
+aucune (référence) & 0,84 & 0,56 & \textcolor{red}{\textbf{0,00}} \\
+\textbf{SMOTE} (crée des neutres synthétiques) & 0,73 & 0,55 & \textcolor{green}{\textbf{0,19}} \\
+sous-échantillonnage & 0,60 & 0,51 & \textcolor{green}{\textbf{0,47}} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Ce qu'on en conclut.} Le rééchantillonnage \textbf{fait exister la classe rare} (rappel neutre $0 \to 0{,}19 \to 0{,}47$) \textbf{au prix d'un peu d'accuracy} : on ne crée pas de performance gratuite, on \emph{redistribue} les erreurs. Le choix dépend de l'objectif : si remonter les neutres est prioritaire, le sous-échantillonnage gagne (rappel 0,47) ; sinon SMOTE est le meilleur compromis.
+
+% =====================================================================
+\sect{2. La validation croisée (juger un modèle honnêtement)}
+
+\textbf{Le problème.} Si on règle et on juge le modèle sur les \emph{mêmes} données, il a juste « appris par cœur » : le score est trop optimiste. Et un seul découpage train/test peut tomber sur une part « facile » ou « difficile » par chance.
+
+\textbf{Image : un examen blanc tournant.} On coupe l'entraînement en \textbf{5 parts (plis)}. À tour de rôle, \textbf{4 parts servent à apprendre} et \textbf{la 5\textsuperscript{e} sert d'examen}. On recommence 5 fois pour que chaque part passe une fois l'examen, puis on \textbf{moyenne les 5 scores}.
+
+\begin{center}
+\begin{tabular}{l|ccccc|c}
+\toprule
+ & pli 1 & pli 2 & pli 3 & pli 4 & pli 5 & \\
+\midrule
+tour 1 & \textcolor{accent}{\textbf{TEST}} & train & train & train & train & $\to$ score$_1$ \\
+tour 2 & train & \textcolor{accent}{\textbf{TEST}} & train & train & train & $\to$ score$_2$ \\
+tour 3 & train & train & \textcolor{accent}{\textbf{TEST}} & train & train & $\to$ score$_3$ \\
+tour 4 & train & train & train & \textcolor{accent}{\textbf{TEST}} & train & $\to$ score$_4$ \\
+tour 5 & train & train & train & train & \textcolor{accent}{\textbf{TEST}} & $\to$ score$_5$ \\
+\bottomrule
+\end{tabular}
+\quad score final $=\dfrac{\text{score}_1+\dots+\text{score}_5}{5}$
+\end{center}
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item \textbf{Stratifiée} (\texttt{StratifiedKFold}) : chaque pli garde les \textbf{mêmes proportions} de classes que l'ensemble (crucial vu notre déséquilibre, sinon un pli pourrait n'avoir aucun neutre).
+\item \textbf{Couplée à \texttt{GridSearchCV}} : on teste chaque combinaison d'hyper-paramètres en validation croisée et on garde la meilleure, mesurée sur le \textbf{macro-F1} (pas l'accuracy, pour ne pas récompenser un modèle qui ignore le neutre).
+\item \textbf{Graine fixe} (\texttt{RANDOM\_STATE = 42}) : mêmes plis à chaque exécution $\Rightarrow$ résultats reproductibles.
+\end{itemize}
+
+\begin{keybox}{Pourquoi c'est essentiel}
+La validation croisée donne une \textbf{estimation stable et honnête} de la performance sur des données \emph{jamais vues}, et empêche le \textbf{sur-apprentissage} du réglage : on ne choisit pas les hyper-paramètres qui plaisent à un seul découpage chanceux. Le vrai test final (les 1\,185 avis mis de côté) reste, lui, totalement intact.
+\end{keybox}
+
+% =====================================================================
+\sect{3. L'élagage de l'arbre de décision (lutter contre le sur-apprentissage)}
+
+\textbf{Le problème.} Un arbre de décision laissé libre grandit jusqu'à \textbf{mémoriser} l'entraînement (une feuille par cas particulier). Il est parfait sur le train et médiocre sur le test : c'est le \textbf{sur-apprentissage}.
+
+\textbf{Image : tailler un arbre.} On coupe les branches inutiles pour garder la forme générale, pas chaque petite brindille. Deux moments pour tailler :
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item \textbf{Pré-élagage} (pre-pruning) : on \textbf{empêche l'arbre de trop pousser} dès le départ (limiter la profondeur, exiger un minimum d'exemples par feuille). On taille \emph{pendant} la croissance.
+\item \textbf{Post-élagage} (post-pruning) : on \textbf{laisse l'arbre pousser en entier, puis on coupe} les branches qui n'apportent rien, via le \textbf{coût-complexité} (\texttt{ccp\_alpha}) : plus \texttt{ccp\_alpha} est grand, plus on coupe.
+\end{itemize}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Arbre & Nb de nœuds & Score \textbf{train} & \textbf{Score test} \\
+\midrule
+complet (non élagué) & 1\,857 & 0,976 & 0,759 \\
+\textbf{bien élagué} & \textbf{69} & 0,811 & \textcolor{green}{\textbf{0,786}} \\
+sur-élagué & 29 & 0,770 & 0,770 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Comment lire ce tableau (à raconter au jury).}
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item L'arbre complet : \textbf{0,976 sur le train mais 0,759 sur le test} $\to$ l'écart énorme = sur-apprentissage manifeste, et 1\,857 nœuds illisibles.
+\item L'arbre élagué : on passe de \textbf{1\,857 à 69 nœuds}, le score train \emph{baisse} (0,811) mais le score \textbf{test monte} (0,786). On a échangé un peu de mémorisation contre de la \textbf{généralisation} : c'est exactement le but.
+\item Trop élaguer (29 nœuds) : le test \emph{redescend} (0,770). L'arbre devient trop simpliste (sous-apprentissage).
+\end{itemize}
+
+\begin{keybox}{Le compromis biais–variance en une image}
+Trop d'arbre $=$ \textbf{variance} (mémorise le bruit). Pas assez $=$ \textbf{biais} (trop bête). L'élagage cherche le \textbf{point creux au milieu} : assez complexe pour comprendre, assez simple pour généraliser. Notre meilleur arbre (69 nœuds, test 0,786) est ce point d'équilibre, et il est en prime \textbf{lisible} (interprétable).
+\end{keybox}
+
+% =====================================================================
+\sect{4. Comment on a ajusté les paramètres des modèles}
+
+\textbf{Le principe.} On ne devine pas les hyper-paramètres « à la main » : on laisse \texttt{GridSearchCV} \textbf{essayer une grille de valeurs}, chacune évaluée par \textbf{validation croisée 5 plis sur le macro-F1}, et il \textbf{garde la meilleure combinaison}. Les grilles sont volontairement \textbf{compactes} : assez larges pour montrer un vrai réglage, assez petites pour rester rapides sous 5 plis.
+
+\textbf{Image : régler une recette.} On teste quelques dosages (plus / moins de sel), on goûte chaque version à l'aveugle (validation croisée), et on retient le meilleur dosage, pas celui qui nous plaît a priori.
+
+\begin{center}
+\begin{tabular}{lll>{\raggedright\arraybackslash}p{5.0cm}}
+\toprule
+Modèle & Paramètre réglé & Valeurs testées & Ce qu'il contrôle \\
+\midrule
+\textbf{Naive Bayes} & \texttt{alpha} & 0,1 / 0,5 / 1,0 & lissage de Laplace (mots jamais vus en entraînement) \\
+\textbf{Decision Tree} & \texttt{max\_depth} & None / 10 / 20 / 30 & pré-élagage : profondeur maximale \\
+                       & \texttt{min\_samples\_leaf} & 1 / 5 / 10 & pré-élagage : taille minimale d'une feuille \\
+                       & \texttt{ccp\_alpha} & 0 / 0,001 / 0,01 & post-élagage : force du coût-complexité \\
+\textbf{Random Forest} & \texttt{n\_estimators} & 200 & nombre d'arbres \\
+                       & \texttt{max\_depth} & None / 20 & profondeur des arbres \\
+                       & \texttt{min\_samples\_leaf} & 1 / 2 & taille minimale d'une feuille \\
+                       & \texttt{max\_features} & sqrt & variables tirées par division \\
+\textbf{AdaBoost} & \texttt{n\_estimators} & 100 / 200 & nombre d'itérations de boosting \\
+                  & \texttt{learning\_rate} & 0,5 / 1,0 & pas d'apprentissage \\
+\textbf{Logistic Reg.} & \texttt{C} & 0,1 / 1,0 / 10,0 & force de la régularisation L2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item \textbf{Naive Bayes} bascule automatiquement en \texttt{GaussianNB} (réglage \texttt{var\_smoothing}) sur les vecteurs denses (Word2Vec), car \texttt{MultinomialNB} exige des comptes positifs.
+\item \textbf{Régularisation (Logistic Regression)} : un \texttt{C} \emph{petit} régularise fort (modèle simple, moins de sur-apprentissage), un \texttt{C} \emph{grand} laisse le modèle coller aux données. Régler \texttt{C}, c'est régler ce curseur.
+\item \textbf{Élagage de l'arbre} : les trois paramètres (\texttt{max\_depth}, \texttt{min\_samples\_leaf}, \texttt{ccp\_alpha}) sont \emph{dans la grille}, donc le pré- et le post-élagage sont choisis automatiquement (c'est ce qui a donné l'arbre à 69 nœuds de la §3).
+\item \textbf{Early stopping (boosting)} : ce n'est pas une grille mais une propriété du modèle. Le \texttt{GradientBoosting} part avec un plafond généreux (\texttt{n\_estimators=500}) et \textbf{s'arrête tout seul} dès que la perte de validation stagne pendant 10 tours (\texttt{n\_iter\_no\_change=10}) : il choisit donc lui-même le bon nombre d'arbres.
+\end{itemize}
+
+\begin{keybox}{La phrase à dire au jury}
+« On n'a pas réglé à la main : \texttt{GridSearchCV} teste chaque combinaison en \textbf{validation croisée 5 plis sur le macro-F1} et retient la meilleure. La grille couvre exprès le \textbf{pré- et post-élagage} (arbres), la \textbf{régularisation} (\texttt{C} de la régression logistique) et le \textbf{boosting} (\texttt{n\_estimators}, \texttt{learning\_rate}), et le boosting a en plus un \textbf{early stopping} automatique. »
+\end{keybox}
+
+% =====================================================================
+\sect{5. Les points subtils qui prouvent la maîtrise}
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item \textbf{SMOTE interpole, il ne duplique pas} : il crée des points \emph{entre} des voisins réels ($k=5$), ce qui évite le simple sur-poids du même exemple. Et il vit \textbf{dans le pipeline}, donc strictement sur le train.
+\item \textbf{Stratification $\neq$ simple découpe} : sans elle, un pli pourrait n'avoir aucun neutre et fausser le macro-F1.
+\item \textbf{On règle sur le macro-F1, pas l'accuracy} : cohérent avec le déséquilibre, pour ne pas primer un modèle qui ignore la classe rare.
+\item \textbf{Élagage = moins de nœuds ET meilleur test} : la preuve qu'on combat le sur-apprentissage, pas qu'on perd de l'information. Le score \emph{train} qui baisse est ici une \textbf{bonne} nouvelle.
+\item \textbf{Tout est reproductible} (graine 42) : mêmes plis, mêmes synthétiques, mêmes arbres à chaque exécution.
+\end{itemize}
+
+\vspace{0.3em}
+{\color{accent}\rule{\linewidth}{1pt}}
+\begin{center}\small\textcolor{primary}{\textbf{En une phrase : « SMOTE fait exister la classe rare, la validation croisée 5-plis juge honnêtement sans fuite, et l'élagage troque la mémorisation (1\,857 nœuds) contre la généralisation (69 nœuds, test 0,759 $\to$ 0,786). »}}\end{center}
+
+\end{document}
