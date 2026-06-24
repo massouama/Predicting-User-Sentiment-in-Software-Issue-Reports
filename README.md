@@ -35,6 +35,24 @@ report.
 python scripts/build_report_pdf.py     # -> report/REPORT.pdf
 ```
 
+### Notes for a local run
+
+- **NLTK data** (stop-words, WordNet) downloads automatically on first run; it is
+  small and needs a working internet connection once.
+- **Pre-trained Word2Vec.** The `Word2Vec-pretrained` vectoriser uses the
+  Google-News vectors, which gensim downloads **once (~1.7 GB)**. To skip that
+  download for a fast local run, set an environment variable:
+
+  ```bash
+  SKIP_PRETRAINED=1 python main.py      # runs BoW, TF-IDF and in-domain Word2Vec only
+  ```
+
+  With no internet access the pre-trained vectoriser is skipped automatically.
+- The dataset is already bundled (`data/issue_sentiment.csv`), so `python main.py`
+  runs offline apart from the two optional downloads above.
+- **BERT** is optional; install `transformers` and `torch`, then run
+  `python scripts/run_bert_experiment.py` (needs access to the model hub).
+
 ---
 
 ## 2. The dataset

@@ -25,6 +25,7 @@ sound:
 """
 from __future__ import annotations
 
+import os
 import shutil
 
 import numpy as np
@@ -170,10 +171,12 @@ def run_main_comparison(save_models: bool = False) -> pd.DataFrame:
     X_train, X_test, y_train, y_test, df = prepare_data()
     run_eda(df)
 
-    # Pre-trained Word2Vec is included if the vectors can be loaded (downloaded
-    # once via gensim-data); BERT only if its optional deep-learning stack is present.
+    # Pre-trained Word2Vec is included if the vectors can be loaded (Google-News,
+    # downloaded once via gensim-data, ~1.7 GB). Set SKIP_PRETRAINED=1 to skip that
+    # download for a quick local run. BERT is added only if its optional
+    # deep-learning stack is importable.
     vec_names = ["BoW", "TF-IDF", "Word2Vec"]
-    if pretrained_available():
+    if not os.environ.get("SKIP_PRETRAINED") and pretrained_available():
         vec_names.append("Word2Vec-pretrained")
     if bert_available():
         vec_names.append("BERT")
