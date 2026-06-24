@@ -1,0 +1,168 @@
+\documentclass[10.5pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage[french]{babel}
+\usepackage[margin=1.7cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{primary}{HTML}{1F3B6E}
+\definecolor{accent}{HTML}{E26D3C}
+\definecolor{green}{HTML}{2E7D5B}
+\definecolor{red}{HTML}{C04432}
+\definecolor{panel}{HTML}{F1F4F9}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.35em}
+\renewcommand{\arraystretch}{1.1}
+
+% Section title helper
+\newcommand{\sect}[1]{\vspace{0.3em}{\color{primary}\large\bfseries #1}\\[-0.4em]
+  {\color{accent}\rule{\linewidth}{1pt}}\par}
+
+% Highlight box
+\newenvironment{keybox}[1]
+{\begin{mdframed}[backgroundcolor=panel,linecolor=accent,linewidth=2pt,
+   innerleftmargin=8pt,innerrightmargin=8pt,innertopmargin=6pt,innerbottommargin=6pt,
+   skipabove=4pt,skipbelow=4pt]{\color{primary}\bfseries #1}\par\vspace{2pt}}
+{\end{mdframed}}
+
+\begin{document}
+
+\begin{center}
+{\color{primary}\LARGE\bfseries Fiche de révision : métriques et déséquilibre}\\[2pt]
+{\small Predicting User Sentiment in Software Issue Reports \quad$\cdot$\quad Yann MASSOUAM, Vénus BAKIKO, Faïçal DIELO}
+\end{center}
+\vspace{0.2em}
+
+% =====================================================================
+\sect{1. La matrice de confusion (notre meilleur modèle : TF-IDF + Naive Bayes)}
+
+On compare ce que le modèle \textbf{prédit} avec la \textbf{vérité}, sur les 1\,185 avis de test.
+
+\begin{center}
+\begin{tabular}{l|ccc|c}
+\toprule
+ & il dit \textbf{négatif} & il dit \textbf{neutre} & il dit \textbf{positif} & total réel \\
+\midrule
+\textbf{vrais négatifs} & 291 & 0 & 81 & 372 \\
+\textbf{vrais neutres}  & 22 & \textcolor{red}{\textbf{0}} & 31 & 53 \\
+\textbf{vrais positifs} & 57 & 0 & 703 & 760 \\
+\midrule
+total prédit & 370 & \textcolor{red}{\textbf{0}} & 815 & 1\,185 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+La diagonale (291, 0, 703) = les bonnes réponses. \textbf{Les négatifs et positifs sont bien prédits.}
+La \textbf{colonne neutre est à 0} : le modèle ne prédit \emph{jamais} la classe neutre.
+
+% =====================================================================
+\sect{2. Les métriques, expliquées simplement}
+
+\textbf{Image : on pêche les poissons rouges dans un étang} (les rouges = une classe, par ex. les positifs).
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item \textbf{Accuracy (exactitude)} : sur \emph{tous} les avis, le \% de bonnes réponses.
+  \quad $\dfrac{291+0+703}{1185}=\mathbf{0{,}84}$. \textit{Piège : 64\,\% des avis sont positifs, donc dire « positif » tout le temps donne déjà $\sim$64\,\% sans rien comprendre.}
+\item \textbf{Précision} d'une classe : \emph{parmi ce que tu as remonté dans le filet, combien est vraiment de cette classe ?} (qualité des prises). Positifs : $703/815=\mathbf{0{,}86}$.
+\item \textbf{Rappel} d'une classe : \emph{parmi tout ce qu'il fallait attraper, combien tu en as attrapé ?} (couverture). Positifs : $703/760=\mathbf{0{,}93}$. \quad Neutres : $0/53=\mathbf{0}$ (aucun retrouvé).
+\item \textbf{F1} : combine précision et rappel en un seul chiffre. \textit{Si l'un des deux est nul, le F1 est nul.}
+\item \textbf{Macro-F1} : moyenne des F1 des 3 classes \textbf{à égalité} (peu importe leur taille).
+\end{itemize}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Classe & Précision & Rappel & \textbf{F1} \\
+\midrule
+négatif & 0,79 & 0,78 & 0,78 \\
+neutre  & 0 & 0 & \textcolor{red}{\textbf{0,00}} \\
+positif & 0,86 & 0,93 & 0,89 \\
+\bottomrule
+\end{tabular}
+\qquad
+$\text{Macro-F1}=\dfrac{0{,}78+0{,}00+0{,}89}{3}=\mathbf{0{,}56}$
+\end{center}
+
+\begin{keybox}{La leçon centrale}
+\textbf{Accuracy 0,84} (a l'air super) \textbf{mais Macro-F1 0,56} (dit la vérité).
+L'accuracy compte chaque \emph{avis} à égalité, donc la grosse classe l'écrase.
+Le macro-F1 compte chaque \emph{classe} à égalité, donc il voit qu'on ignore le neutre.
+$\Rightarrow$ Sur un jeu déséquilibré, on regarde le \textbf{macro-F1} et le \textbf{rappel par classe}, pas l'accuracy.
+\end{keybox}
+
+% =====================================================================
+\sect{3. Le constat des zéros : qu'avons-nous fait ?}
+
+\textbf{Le constat.} La classe neutre (seulement 4,5\,\% des données) n'est jamais prédite.
+\textbf{Pourquoi c'est normal} (et pas un bug) :
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item \textbf{Déséquilibre extrême} : le neutre est minuscule.
+\item \textbf{Label « proxy »} : un avis 3 étoiles ressemble souvent à un négatif ou un positif (« ça marche mais bof »).
+\item \textbf{Mécanique de Naive Bayes} : prédiction = \emph{probabilité a priori de la classe} $\times$ \emph{vraisemblance des mots}. Le neutre a un a priori minuscule et des mots peu distinctifs, donc sa probabilité n'est \emph{jamais la plus grande} : il n'est jamais choisi.
+\end{itemize}
+
+\textbf{Notre démarche (3 étapes, à raconter au jury) :}
+\begin{enumerate}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+\item \textbf{Détecter} : c'est le macro-F1 et le rappel par classe (pas l'accuracy) qui ont révélé le problème.
+\item \textbf{Vérifier que ce n'est pas une erreur} (voir la checklist en §5).
+\item \textbf{Corriger} le déséquilibre par rééchantillonnage, appliqué \textbf{seulement sur l'entraînement} :
+\end{enumerate}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Stratégie & Accuracy & Macro-F1 & \textbf{Rappel neutre} \\
+\midrule
+aucune (référence) & 0,84 & 0,56 & \textcolor{red}{\textbf{0,00}} \\
+\textbf{SMOTE} (crée des neutres synthétiques) & 0,73 & 0,55 & \textcolor{green}{\textbf{0,19}} \\
+sous-échantillonnage & 0,60 & 0,51 & \textcolor{green}{\textbf{0,47}} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% =====================================================================
+\sect{4. Conclusions à en tirer}
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item Une \textbf{accuracy élevée peut cacher une classe entière ignorée} : il faut toujours regarder par classe.
+\item Le \textbf{rééchantillonnage fait exister la classe rare} (rappel neutre $0 \to 0{,}19 \to 0{,}47$), \textbf{au prix d'un peu d'accuracy} : on ne crée pas de la performance gratuite, on \emph{redistribue} les erreurs.
+\item Le choix de la métrique est une \textbf{décision} : on a réglé les modèles sur le macro-F1, justement pour ne pas récompenser un modèle qui ignore le neutre.
+\end{itemize}
+
+% =====================================================================
+\sect{5. Comment vérifier qu'on ne s'est pas trompé (checklist anti-bug)}
+
+\begin{keybox}{À dégainer si le jury doute des zéros}
+\begin{itemize}[leftmargin=1.2em,itemsep=1pt,topsep=1pt]
+\item \textbf{Les lignes somment aux effectifs réels} : $291+0+81=372$ négatifs, $22+0+31=53$ neutres, $57+0+703=760$ positifs. La matrice est cohérente.
+\item \textbf{Le neutre est bien présent à l'entraînement} ($\sim$212 exemples) : le modèle le voit, mais ne le choisit jamais. Ce n'est donc pas une classe oubliée.
+\item \textbf{Résultat reproductible} : graine fixe (\texttt{RANDOM\_STATE = 42}), mêmes chiffres à chaque exécution.
+\item \textbf{Spécifique au modèle} : d'autres réglages, et surtout les pipelines avec rééchantillonnage, \emph{prédisent} le neutre. Le zéro n'est pas systématique.
+\item \textbf{Cohérence inter-expériences} : la baseline du test de déséquilibre et le point « 100\,\% des composantes » de la PCA donnent exactement le même score (0,56), preuve que les briques sont cohérentes.
+\end{itemize}
+\end{keybox}
+
+% =====================================================================
+\sect{6. Les points subtils qui prouvent la maîtrise}
+
+\begin{itemize}[leftmargin=1.3em,itemsep=1pt,topsep=2pt]
+\item Nommer le phénomène : c'est l'\textbf{« accuracy paradox »} / effondrement de la classe minoritaire, attendu en cas de fort déséquilibre.
+\item Rappeler que le \textbf{label vient des étoiles} (signal approximatif) : limite assumée, pas cachée, surtout pour le 3 étoiles ambigu.
+\item Insister sur l'\textbf{anti-fuite} : déduplication des textes et rééchantillonnage uniquement sur le train, pour une évaluation honnête.
+\item Conclure par le compromis : \textbf{« quelle métrique selon l'objectif »} : si l'on veut surtout remonter les avis neutres, on choisit le sous-échantillonnage (rappel neutre 0,47) ; sinon SMOTE est le meilleur équilibre.
+\end{itemize}
+
+\vspace{0.3em}
+{\color{accent}\rule{\linewidth}{1pt}}
+\begin{center}\small\textcolor{primary}{\textbf{En une phrase : « Accuracy 0,84 mais macro-F1 0,56, car le neutre n'est jamais prédit ; on l'a détecté avec le rappel par classe, vérifié que ce n'est pas un bug, et corrigé avec SMOTE. »}}\end{center}
+
+\end{document}
