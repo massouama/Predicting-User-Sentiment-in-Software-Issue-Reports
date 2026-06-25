@@ -12,9 +12,9 @@ import sys
 import time
 from pathlib import Path
 
-# Ajoute la racine du dépôt au chemin Python pour que les imports fonctionnent
-# depuis ce sous-dossier.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Ajoute CE dossier (projet_simplifie/) au chemin Python pour que `config` et
+# `src` se résolvent ici, et non vers les fichiers homonymes de la racine du dépôt.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config
 from src.experiences import (

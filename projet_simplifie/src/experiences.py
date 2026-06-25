@@ -63,10 +63,13 @@ def preparer_donnees():
     # (avis en emoji, langue non-anglaise, etc.).
     df = df[df["texte_propre"].str.len() > 0].reset_index(drop=True)
 
-    # Division train / test stratifiée.
-    X_train, X_test, y_train, y_test = diviser_donnees(
-        df.rename(columns={"texte_propre": "text"})
-    )
+    # Remplace le texte brut par sa version nettoyée, puis divise.
+    # (Un simple rename "texte_propre"->"text" créerait une colonne "text"
+    # en double, et df["text"] renverrait alors un tableau 2D qui casse les
+    # vectoriseurs BoW/TF-IDF.)
+    df["text"] = df["texte_propre"]
+    df = df.drop(columns=["texte_propre"])
+    X_train, X_test, y_train, y_test = diviser_donnees(df)
     return X_train, X_test, y_train, y_test, df
 
 
