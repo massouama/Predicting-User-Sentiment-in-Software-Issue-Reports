@@ -1,91 +1,60 @@
-"""Loaders for the **real** review-sentiment corpora.
+"""Chargement du corpus d'avis Facebook étiqueté en sentiment.
 
-Two ready-to-use real datasets are supported (selected via
-:data:`config.DATASET_SOURCE`):
+Le jeu de données est un export Kaggle d'avis de l'application Facebook
+(colonne ``content`` + une note ``score`` de 1 à 5). On convertit la note en
+sentiment, on supprime les textes vides et les doublons (un texte identique
+présent à la fois dans le train et le test fausserait l'évaluation), puis on
+mélange le tout de façon reproductible.
 
-* ``"facebook"`` *(default)* -- a Kaggle export of **Facebook app reviews**
-  (``content`` + 1-5 ``score``), shipped with the repo at
-  :data:`config.FACEBOOK_CSV_PATH`.
-* ``"app_reviews"`` -- the Google Play review collection from the open
-  ``sealuzh/user_quality`` research repository (288 k reviews), downloaded once
-  (credential-free).
-
-Both are turned into a labelled ``text,label`` corpus by the shared
-:func:`reviews_to_labelled` helper, which maps star ratings onto the three
-sentiment classes (:data:`config.STAR_TO_SENTIMENT`) and keeps a reproducible,
-class-stratified sample that preserves the natural -- strongly positive-skewed --
-imbalance. That imbalance is exactly what the SMOTE / under-sampling experiment
-addresses. This satisfies the project brief's *"App Store reviews dataset"*
-option with genuinely real data.
+Le corpus traité est mis en cache dans :data:`config.DATASET_PATH` afin que
+toutes les étapes en aval travaillent exactement sur les mêmes données.
 """
 from __future__ import annotations
 
-import urllib.request
+from pathlib import Path
 
 import pandas as pd
 
 import config
 
 
-def reviews_to_labelled(
-    df: pd.DataFrame,
-    text_col: str,
-    score_col: str,
-    n_samples: int | None,
+def build_facebook_reviews_dataset(
+    path=config.FACEBOOK_CSV_PATH,
     random_state: int = config.RANDOM_STATE,
 ) -> pd.DataFrame:
-    """Convert a raw reviews frame into a labelled ``text,label`` sample.
-
-    Maps the star ``score_col`` to sentiment, drops empty / duplicate texts, and
-    optionally takes a class-stratified sample of ``n_samples`` that preserves
-    the natural class proportions (``None`` keeps every row). Returns a shuffled
-    DataFrame.
-    """
+    """Construit le corpus étiqueté ``text,label`` à partir du CSV Facebook."""
+    raw = pd.read_csv(path, usecols=[config.FACEBOOK_TEXT_COL, config.FACEBOOK_SCORE_COL])
     out = pd.DataFrame(
         {
-            "text": df[text_col].astype(str).str.strip(),
-            "label": df[score_col].map(config.STAR_TO_SENTIMENT),
+            "text": raw[config.FACEBOOK_TEXT_COL].astype(str).str.strip(),
+            "label": raw[config.FACEBOOK_SCORE_COL].map(config.STAR_TO_SENTIMENT),
         }
     )
     out = out.dropna(subset=["label"])
     out = out[out["text"].str.len() > 0].drop_duplicates(subset="text")
-
-    if n_samples and n_samples < len(out):
-        frac = n_samples / len(out)
-        out = out.groupby("label", group_keys=False).sample(frac=frac, random_state=random_state)
-
+    # Mélange reproductible : les classes sont entrelacées avant tout découpage.
     return out.sample(frac=1.0, random_state=random_state).reset_index(drop=True)
 
 
-def build_facebook_reviews_dataset(
-    path=config.FACEBOOK_CSV_PATH,
-    n_samples: int | None = config.FACEBOOK_N_SAMPLES,
-    random_state: int = config.RANDOM_STATE,
-) -> pd.DataFrame:
-    """Build the labelled corpus from the bundled Facebook-reviews CSV."""
-    raw = pd.read_csv(path, usecols=[config.FACEBOOK_TEXT_COL, config.FACEBOOK_SCORE_COL])
-    return reviews_to_labelled(
-        raw, config.FACEBOOK_TEXT_COL, config.FACEBOOK_SCORE_COL, n_samples, random_state
-    )
+def load_or_create_dataset(path=config.DATASET_PATH) -> pd.DataFrame:
+    """Renvoie le corpus mis en cache, en le construisant au premier appel.
 
+    Mettre le CSV traité en cache garantit que toutes les étapes (exploration,
+    entraînement, rapport) utilisent exactement les mêmes données et rend les
+    exécutions reproductibles.
+    """
+    path = Path(path)
+    if path.exists():
+        return pd.read_csv(path)
 
-def build_app_reviews_dataset(
-    n_samples: int = config.N_SAMPLES_REAL,
-    random_state: int = config.RANDOM_STATE,
-) -> pd.DataFrame:
-    """Build the labelled corpus from the Google Play (``sealuzh``) reviews."""
-    if not config.RAW_REVIEWS_PATH.exists():
-        config.ensure_directories()
-        urllib.request.urlretrieve(config.REVIEWS_URL, config.RAW_REVIEWS_PATH)
-    raw = pd.read_csv(config.RAW_REVIEWS_PATH, usecols=["review", "star"])
-    return reviews_to_labelled(raw, "review", "star", n_samples, random_state)
+    config.ensure_directories()
+    df = build_facebook_reviews_dataset()
+    df.to_csv(path, index=False)
+    return df
 
 
 if __name__ == "__main__":
-    data = build_facebook_reviews_dataset()
-    print(f"Built {len(data)} labelled Facebook reviews")
-    print("\nClass distribution:")
+    data = load_or_create_dataset()
+    print(f"{len(data)} avis Facebook étiquetés")
+    print("\nRépartition des classes :")
     print(data["label"].value_counts().to_string())
-    print("\nExamples:")
-    for _, row in data.head(6).iterrows():
-        print(f"  [{row['label']:>8}] {row['text'][:90]}")

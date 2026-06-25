@@ -19,7 +19,6 @@ brief.
 pip install -r requirements.txt
 
 # 2. (optional) Inspect the dataset
-python scripts/generate_dataset.py     # (re)generate the cached corpus
 python scripts/explore_data.py          # summary stats + EDA figures
 
 # 3. Run the whole study end to end (~8 minutes on 4 cores)
@@ -49,9 +48,7 @@ python scripts/build_report_pdf.py     # -> report/REPORT.pdf
 
   With no internet access the pre-trained vectoriser is skipped automatically.
 - The dataset is already bundled (`data/issue_sentiment.csv`), so `python main.py`
-  runs offline apart from the two optional downloads above.
-- **BERT** is optional; install `transformers` and `torch`, then run
-  `python scripts/run_bert_experiment.py` (needs access to the model hub).
+  runs offline apart from the optional pre-trained download above.
 
 ---
 
@@ -75,11 +72,6 @@ The strong, natural positive skew is what motivates the SMOTE / under-sampling
 experiment, and the tiny 3★ "neutral" class genuinely overlaps its neighbours — a
 real, non-trivial learning problem.
 
-> **Other sources.** `config.DATASET_SOURCE` also selects the Google Play
-> `sealuzh/user_quality` corpus (`"app_reviews"`, 288 k reviews, downloaded on
-> demand) or a reproducible **synthetic generator** (`"synthetic"`, offline
-> fallback). The pipeline is identical for all three.
-
 ---
 
 ## 3. Pipeline overview
@@ -90,7 +82,7 @@ raw text
    ▼  clean → tokenise → drop stop-words (keep negations) → WordNet lemmatise
 cleaned text
    │  src/vectorization.py
-   ▼  Bag-of-Words │ TF-IDF │ Word2Vec │ Word2Vec-pretrained (Google-News) │ BERT (optional)
+   ▼  Bag-of-Words │ TF-IDF │ Word2Vec │ Word2Vec-pretrained (Google-News)
 feature matrix
    │  src/balancing.py        (SMOTE / under-sampling, train folds only)
    │  TruncatedSVD            (PCA-equivalent reduction, optional)
@@ -124,7 +116,7 @@ metrics + confusion matrices + figures
 |---|---|
 | Pre-cleaned dataset (Facebook app reviews) | `src/real_data.py` |
 | Cleaning, lemmatisation, stop-words | `src/preprocessing.py` |
-| BoW, TF-IDF, Word2Vec, **pre-trained Word2Vec** (Google-News), BERT | `src/vectorization.py` |
+| BoW, TF-IDF, Word2Vec, **pre-trained Word2Vec** (Google-News) | `src/vectorization.py` |
 | SMOTE / under-sampling | `src/balancing.py`, `experiment_imbalance` |
 | ≥3 classifiers (NB, Decision Tree, ensembles) | `src/models.py` |
 | 5-fold cross-validation + GridSearchCV tuning | `src/experiment.py` |
@@ -133,12 +125,6 @@ metrics + confusion matrices + figures
 | Regularisation | `LogisticRegression` (`C` tuned) |
 | Early stopping (boosting) | `experiment_early_stopping` |
 | Accuracy / Precision / Recall / F1 / confusion matrix | `src/evaluation.py` |
-
-> **BERT note.** A complete, documented `BertVectorizer` is provided. It needs the
-> optional `transformers` + `torch` packages *and* network access to the model
-> hub; where those are unavailable the experiments use BoW / TF-IDF / Word2Vec /
-> pre-trained Word2Vec, and BERT is skipped automatically. `scripts/run_bert_experiment.py`
-> adds BERT to the comparison wherever the hub is reachable (e.g. Colab).
 
 ---
 
@@ -153,16 +139,14 @@ metrics + confusion matrices + figures
 │   ├── facebook_reviews.csv # real Facebook reviews (default source)
 │   └── issue_sentiment.csv  # cached processed corpus
 ├── src/
-│   ├── real_data.py        # real review loaders (Facebook / Google Play)
-│   ├── data_generation.py  # synthetic generator (offline fallback)
+│   ├── real_data.py        # Facebook review loader (cached)
 │   ├── preprocessing.py     # text cleaning / lemmatisation
-│   ├── vectorization.py     # BoW / TF-IDF / Word2Vec / pre-trained Word2Vec / BERT
+│   ├── vectorization.py     # BoW / TF-IDF / Word2Vec / pre-trained Word2Vec
 │   ├── balancing.py         # SMOTE / under-sampling
 │   ├── models.py            # classifiers + hyper-parameter grids
 │   ├── evaluation.py        # metrics + figures
 │   └── experiment.py        # orchestration of every experiment
 ├── scripts/
-│   ├── generate_dataset.py
 │   ├── explore_data.py
 │   └── build_report_pdf.py  # Markdown report -> PDF
 ├── results/                # tables, confusion matrices, figures (generated)

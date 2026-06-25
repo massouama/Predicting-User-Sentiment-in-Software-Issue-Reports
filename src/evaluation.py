@@ -1,13 +1,13 @@
-"""Metrics and visualisation helpers.
+"""Métriques et fonctions de visualisation.
 
-Centralises everything the brief lists under *Evaluation* -- accuracy,
-precision, recall, F1 and the confusion matrix -- plus the comparison charts
-used in the report.  Macro-averaging is used throughout because, on an
-imbalanced problem, it weights every class equally and so reflects minority-class
-performance (which plain accuracy hides).
+Regroupe tout ce que le sujet demande sous « Évaluation » — accuracy, précision,
+rappel, F1 et matrice de confusion — ainsi que les graphiques de comparaison du
+rapport. La moyenne *macro* est utilisée partout : sur un problème déséquilibré,
+elle pondère chaque classe également et reflète donc la performance sur les
+classes minoritaires (que l'accuracy masque).
 
-A non-interactive Matplotlib backend is selected at import time so the module
-renders figures to disk on a headless server without any display.
+Un backend Matplotlib non interactif est choisi à l'import pour produire les
+figures sur un serveur sans affichage.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import matplotlib
 
-matplotlib.use("Agg")  # headless rendering; must precede the pyplot import
+matplotlib.use("Agg")  # rendu sans affichage ; doit précéder l'import de pyplot
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -32,11 +32,10 @@ import config
 
 
 def compute_metrics(y_true, y_pred) -> dict[str, float]:
-    """Return the headline metrics as a flat dict.
+    """Renvoie les métriques principales sous forme de dict plat.
 
-    Precision / recall / F1 are macro-averaged (unweighted mean over classes).
-    ``zero_division=0`` keeps the score well-defined if a model never predicts
-    some class.
+    Précision / rappel / F1 sont en moyenne macro. ``zero_division=0`` garde le
+    score défini si un modèle ne prédit jamais une classe.
     """
     return {
         "accuracy": accuracy_score(y_true, y_pred),
@@ -47,10 +46,10 @@ def compute_metrics(y_true, y_pred) -> dict[str, float]:
 
 
 def plot_confusion_matrix(y_true, y_pred, title: str, path: Path) -> None:
-    """Save a labelled confusion-matrix heat-map.
+    """Sauvegarde une matrice de confusion (lignes = vraies, colonnes = prédites).
 
-    Rows are true classes, columns predicted, both ordered by
-    :data:`config.CLASS_NAMES` so every matrix in the project is comparable.
+    Les classes sont ordonnées selon :data:`config.CLASS_NAMES` pour que toutes
+    les matrices du projet soient comparables.
     """
     cm = confusion_matrix(y_true, y_pred, labels=list(config.CLASS_NAMES))
     fig, ax = plt.subplots(figsize=(5.5, 4.5))
@@ -58,8 +57,8 @@ def plot_confusion_matrix(y_true, y_pred, title: str, path: Path) -> None:
         cm, annot=True, fmt="d", cmap="Blues", cbar=False,
         xticklabels=config.CLASS_NAMES, yticklabels=config.CLASS_NAMES, ax=ax,
     )
-    ax.set_xlabel("Predicted label")
-    ax.set_ylabel("True label")
+    ax.set_xlabel("Classe prédite")
+    ax.set_ylabel("Vraie classe")
     ax.set_title(title)
     fig.tight_layout()
     fig.savefig(path, dpi=config.FIG_DPI)
@@ -67,18 +66,17 @@ def plot_confusion_matrix(y_true, y_pred, title: str, path: Path) -> None:
 
 
 def plot_model_comparison(results: pd.DataFrame, metric: str, path: Path) -> None:
-    """Grouped bar chart of one metric across vectoriser x classifier combos.
+    """Diagramme en barres groupées d'une métrique par vectoriseur x classifieur.
 
-    Expects a tidy frame with ``vectorizer``, ``model`` and ``<metric>`` columns
-    (as produced by the experiment runner).
+    Attend une table avec les colonnes ``vectorizer``, ``model`` et ``<metric>``.
     """
     pivot = results.pivot(index="model", columns="vectorizer", values=metric)
     fig, ax = plt.subplots(figsize=(9, 5))
     pivot.plot(kind="bar", ax=ax, width=0.8)
     ax.set_ylabel(metric)
     ax.set_ylim(0, 1)
-    ax.set_title(f"Model comparison by {metric}")
-    ax.legend(title="Vectoriser", bbox_to_anchor=(1.01, 1), loc="upper left")
+    ax.set_title(f"Comparaison des modèles selon {metric}")
+    ax.legend(title="Vectoriseur", bbox_to_anchor=(1.01, 1), loc="upper left")
     ax.grid(axis="y", alpha=0.3)
     plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
     fig.tight_layout()
@@ -87,7 +85,7 @@ def plot_model_comparison(results: pd.DataFrame, metric: str, path: Path) -> Non
 
 
 def plot_bar(series: pd.Series, title: str, ylabel: str, path: Path, ylim=None) -> None:
-    """Generic single-series bar chart (used for ablations and distributions)."""
+    """Diagramme en barres d'une série (ablations, distributions)."""
     fig, ax = plt.subplots(figsize=(7, 4.5))
     series.plot(kind="bar", ax=ax, color="steelblue")
     ax.set_title(title)
@@ -102,7 +100,7 @@ def plot_bar(series: pd.Series, title: str, ylabel: str, path: Path, ylim=None) 
 
 
 def plot_line(x, y, title: str, xlabel: str, ylabel: str, path: Path) -> None:
-    """Generic line plot (PCA variance curve, pruning / early-stopping curves)."""
+    """Courbe simple (variance SVD, élagage, early stopping)."""
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.plot(x, y, marker="o", markersize=3, color="darkorange")
     ax.set_title(title)

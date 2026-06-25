@@ -1,27 +1,24 @@
-"""End-to-end orchestration of every experiment in the project.
+"""Orchestration de bout en bout de toutes les expériences du projet.
 
-This module turns the building blocks (:mod:`preprocessing`,
-:mod:`vectorization`, :mod:`models`, ...) into the concrete experiments the brief
-asks for:
+Transforme les briques (:mod:`preprocessing`, :mod:`vectorization`,
+:mod:`models`, ...) en les expériences demandées par le sujet :
 
-* :func:`run_main_comparison`     -- vectoriser x classifier grid with tuning + CV
-* :func:`experiment_imbalance`    -- none vs SMOTE vs under-sampling
-* :func:`experiment_pca`          -- dimensionality reduction (TruncatedSVD/LSA)
-* :func:`experiment_pruning`      -- decision-tree cost-complexity post-pruning
-* :func:`experiment_early_stopping` -- early stopping in gradient boosting
+* :func:`run_main_comparison`       -- grille vectoriseur x classifieur (réglage + CV)
+* :func:`experiment_imbalance`      -- aucun vs SMOTE vs sous-échantillonnage
+* :func:`experiment_pca`            -- réduction de dimension (TruncatedSVD / LSA)
+* :func:`experiment_pruning`        -- post-élagage cost-complexity d'un arbre
+* :func:`experiment_early_stopping` -- early stopping du gradient boosting
 
-Two performance choices keep the whole suite fast while remaining methodologically
-sound:
+Deux choix de performance gardent la suite rapide tout en restant
+méthodologiquement corrects :
 
-1. **Preprocess once.**  Text cleaning is *stateless* (it learns nothing from the
-   data), so applying it a single time up front is exactly equivalent to running
-   it inside every CV fold -- but avoids re-lemmatising the corpus thousands of
-   times.
-2. **Cache vectorisers.**  A shared :class:`joblib.Memory` caches each fitted
-   vectoriser.  Because all searches reuse one fixed
-   :class:`~sklearn.model_selection.StratifiedKFold`, the (expensive) Word2Vec /
-   TF-IDF fits are computed once per fold and reused across every hyper-parameter
-   combination and every classifier.
+1. **Nettoyer une seule fois.** Le nettoyage est sans état (il n'apprend rien),
+   donc l'appliquer une fois en amont équivaut exactement à le refaire dans
+   chaque pli de CV, sans relemmatiser le corpus des milliers de fois.
+2. **Mettre les vectoriseurs en cache.** Un :class:`joblib.Memory` partagé met
+   en cache chaque vectoriseur ajusté. Comme toutes les recherches réutilisent
+   un même :class:`~sklearn.model_selection.StratifiedKFold`, les ajustements
+   coûteux (Word2Vec / TF-IDF) sont calculés une fois par pli puis réutilisés.
 """
 from __future__ import annotations
 
@@ -42,7 +39,7 @@ from imblearn.pipeline import Pipeline as ImbPipeline
 import config
 from src import models
 from src.balancing import SAMPLERS, class_distribution
-from src.data_generation import load_or_create_dataset
+from src.real_data import load_or_create_dataset
 from src.evaluation import (
     compute_metrics,
     plot_bar,
@@ -51,85 +48,74 @@ from src.evaluation import (
     plot_model_comparison,
 )
 from src.preprocessing import TextPreprocessor
-from src.vectorization import VECTORIZERS, bert_available, make_tfidf, pretrained_available
+from src.vectorization import VECTORIZERS, make_tfidf, pretrained_available
 
-# Shared, fixed CV splitter -> identical folds across every search, which is
-# what makes the joblib vectoriser cache effective.
+# Découpage CV fixe et partagé -> plis identiques pour toutes les recherches,
+# ce qui rend efficace le cache joblib des vectoriseurs.
 _CV = StratifiedKFold(n_splits=config.CV_FOLDS, shuffle=True, random_state=config.RANDOM_STATE)
 
-# On-disk cache for fitted pipeline transformers (vectorisers).
+# Cache disque des transformateurs (vectoriseurs) ajustés.
 _CACHE_DIR = config.RESULTS_DIR / ".joblib_cache"
 _MEMORY = Memory(location=str(_CACHE_DIR), verbose=0)
 
 
 def clear_cache() -> None:
-    """Remove the joblib transformer cache (call for a clean, timed run)."""
+    """Supprime le cache joblib des vectoriseurs (pour une exécution propre)."""
     if _CACHE_DIR.exists():
         shutil.rmtree(_CACHE_DIR)
 
 
-# ---------------------------------------------------------------------------
-# Data preparation
-# ---------------------------------------------------------------------------
+# --- Préparation des données -----------------------------------------------
 def prepare_data():
-    """Load, clean and split the corpus once for every experiment.
+    """Charge, nettoie et découpe le corpus une fois pour toutes les expériences.
 
-    Returns
-    -------
-    X_train, X_test : list[str]
-        Pre-cleaned documents (ready for any vectoriser).
-    y_train, y_test : numpy.ndarray
-        String labels.
-    df : pandas.DataFrame
-        The full dataset with an added ``clean`` column (used by the EDA step).
+    Renvoie ``X_train, X_test`` (documents nettoyés), ``y_train, y_test``
+    (labels) et ``df`` (corpus complet avec une colonne ``clean``, pour l'EDA).
     """
     df = load_or_create_dataset()
     df["clean"] = TextPreprocessor().transform(df["text"].tolist())
 
-    # Real reviews can reduce to an empty string (non-English, all stop-words,
-    # emoji-only); drop those so every vectoriser sees a non-degenerate document.
+    # Certains avis deviennent vides après nettoyage (non anglais, que des mots
+    # vides, emoji seuls) : on les retire pour que chaque vectoriseur reçoive un
+    # document non dégénéré.
     df = df[df["clean"].str.len() > 0].reset_index(drop=True)
 
     X_train, X_test, y_train, y_test = train_test_split(
         df["clean"].to_numpy(),
         df["label"].to_numpy(),
         test_size=config.TEST_SIZE,
-        stratify=df["label"],          # preserve class proportions in both splits
+        stratify=df["label"],          # conserve les proportions de classes
         random_state=config.RANDOM_STATE,
     )
     return X_train, X_test, y_train, y_test, df
 
 
-# ---------------------------------------------------------------------------
-# Exploratory data analysis (figures for the report)
-# ---------------------------------------------------------------------------
+# --- Analyse exploratoire (figures du rapport) -----------------------------
 def run_eda(df: pd.DataFrame) -> None:
-    """Save class-distribution and document-length figures."""
+    """Sauvegarde les figures de distribution des classes et de longueur."""
     dist = class_distribution(df["label"])
     plot_bar(
-        dist, "Class distribution (full corpus)", "number of reports",
+        dist, "Distribution des classes (corpus complet)", "nombre d'avis",
         config.FIGURES_DIR / "class_distribution.png",
     )
 
     lengths = df["clean"].str.split().map(len)
     plot_bar(
         lengths.groupby(df["label"]).mean().reindex(config.CLASS_NAMES),
-        "Mean cleaned-token count per class", "mean tokens",
+        "Nombre moyen de tokens nettoyés par classe", "tokens moyens",
         config.FIGURES_DIR / "token_length_by_class.png",
     )
 
 
-# ---------------------------------------------------------------------------
-# Main comparison: vectoriser x classifier, tuned with 5-fold CV
-# ---------------------------------------------------------------------------
+# --- Comparaison principale : vectoriseur x classifieur, réglés en CV 5 plis ---
 def _tune_and_evaluate(vec_name, dense, X_train, X_test, y_train, y_test, save_models):
-    """Tune and test every classifier for one vectoriser. Returns result rows."""
+    """Règle et teste chaque classifieur pour un vectoriseur. Renvoie les lignes."""
     rows = []
     classifiers = models.build_classifiers(dense=dense)
     for clf_name, spec in classifiers.items():
         pipe = Pipeline(
             steps=[("vec", VECTORIZERS[vec_name]["factory"]()), (models.CLF_STEP, spec["estimator"])],
-            memory=_MEMORY,  # cache the vectoriser fit across folds / param combos
+            memory=_MEMORY,  # met en cache l'ajustement du vectoriseur entre plis / combos
         )
         search = GridSearchCV(
             pipe, spec["param_grid"], scoring=config.SCORING,
@@ -161,25 +147,22 @@ def _tune_and_evaluate(vec_name, dense, X_train, X_test, y_train, y_test, save_m
 
 
 def run_main_comparison(save_models: bool = False) -> pd.DataFrame:
-    """Run the full vectoriser x classifier comparison and persist artefacts.
+    """Lance la comparaison vectoriseur x classifieur complète et écrit les artefacts.
 
-    For each vectoriser (BoW, TF-IDF, Word2Vec, and BERT when available) every
-    classifier is hyper-parameter-tuned with 5-fold CV on the training split and
-    evaluated once on the held-out test split.  Confusion matrices, a results
-    table and comparison bar charts are written to ``results/``.
+    Pour chaque vectoriseur (BoW, TF-IDF, Word2Vec, et Word2Vec pré-entraîné si
+    les vecteurs sont chargeables), chaque classifieur est réglé en CV à 5 plis
+    sur le train puis évalué une fois sur le test. Matrices de confusion, table
+    de résultats et diagrammes de comparaison sont écrits dans ``results/``.
     """
     X_train, X_test, y_train, y_test, df = prepare_data()
     run_eda(df)
 
-    # Pre-trained Word2Vec is included if the vectors can be loaded (Google-News,
-    # downloaded once via gensim-data, ~1.7 GB). Set SKIP_PRETRAINED=1 to skip that
-    # download for a quick local run. BERT is added only if its optional
-    # deep-learning stack is importable.
+    # Le Word2Vec pré-entraîné (Google News, ~1,7 Go via gensim-data) n'est ajouté
+    # que si ses vecteurs sont chargeables. SKIP_PRETRAINED=1 saute ce
+    # téléchargement pour une exécution locale rapide.
     vec_names = ["BoW", "TF-IDF", "Word2Vec"]
     if not os.environ.get("SKIP_PRETRAINED") and pretrained_available():
         vec_names.append("Word2Vec-pretrained")
-    if bert_available():
-        vec_names.append("BERT")
 
     all_rows = []
     for vec_name in vec_names:
@@ -194,22 +177,20 @@ def run_main_comparison(save_models: bool = False) -> pd.DataFrame:
     return results
 
 
-# ---------------------------------------------------------------------------
-# Experiment: class-imbalance handling
-# ---------------------------------------------------------------------------
+# --- Expérience : gestion du déséquilibre de classes -----------------------
 def experiment_imbalance() -> pd.DataFrame:
-    """Compare no-resampling vs SMOTE vs under-sampling on TF-IDF features.
+    """Compare aucun rééchantillonnage vs SMOTE vs sous-échantillonnage (TF-IDF).
 
-    Uses Logistic Regression as a fixed, fast base learner so the only thing
-    that changes is the sampling strategy.  Reports overall metrics plus
-    per-class recall, which is where minority-class gains show up.
+    Utilise une régression logistique fixe comme base rapide, pour que seule la
+    stratégie de rééchantillonnage change. Rapporte les métriques globales et le
+    rappel par classe, là où les gains sur la classe minoritaire apparaissent.
     """
     X_train, X_test, y_train, y_test, _ = prepare_data()
     rows = []
     for name, sampler in SAMPLERS.items():
         steps = [("vec", make_tfidf())]
         if sampler is not None:
-            steps.append(("sampler", sampler))           # active only at fit time
+            steps.append(("sampler", sampler))           # actif uniquement à l'entraînement
         steps.append((models.CLF_STEP, LogisticRegression(max_iter=1000, random_state=config.RANDOM_STATE)))
         pipe = ImbPipeline(steps)
         pipe.fit(X_train, y_train)
@@ -228,26 +209,23 @@ def experiment_imbalance() -> pd.DataFrame:
     result.to_csv(config.TABLES_DIR / "imbalance_comparison.csv", index=False)
     plot_bar(
         result.set_index("strategy")["f1_macro"],
-        "Imbalance handling: macro-F1 (TF-IDF + LogReg)", "macro-F1",
+        "Gestion du déséquilibre : macro-F1 (TF-IDF + LogReg)", "macro-F1",
         config.FIGURES_DIR / "imbalance_f1.png", ylim=(0, 1),
     )
     return result
 
 
-# ---------------------------------------------------------------------------
-# Experiment: dimensionality reduction (PCA / TruncatedSVD)
-# ---------------------------------------------------------------------------
+# --- Expérience : réduction de dimension (PCA / TruncatedSVD) ---------------
 def experiment_pca() -> pd.DataFrame:
-    """Study TruncatedSVD (LSA) on TF-IDF features.
+    """Étudie TruncatedSVD (LSA) sur les features TF-IDF.
 
-    Plain PCA centres the data and so densifies a sparse TF-IDF matrix, which is
-    wasteful and memory-hungry.  :class:`TruncatedSVD` is the standard,
-    PCA-equivalent reduction for sparse text (it skips centring), so we use it
-    here and refer to it as PCA for the brief.
+    La PCA ordinaire centre les données et densifie donc une matrice TF-IDF
+    creuse, ce qui est coûteux en mémoire. :class:`TruncatedSVD` est la réduction
+    équivalente standard pour le texte creux (elle ne centre pas) ; on l'appelle
+    « PCA » par rapport au sujet.
 
-    Produces the cumulative explained-variance curve and downstream macro-F1 as
-    a function of the number of components, compared against the full-feature
-    baseline.
+    Produit la courbe de variance expliquée cumulée et le macro-F1 aval en
+    fonction du nombre de composantes, comparés à la baseline pleine dimension.
     """
     X_train, X_test, y_train, y_test, _ = prepare_data()
 
@@ -255,7 +233,7 @@ def experiment_pca() -> pd.DataFrame:
     Xtr = tfidf.fit_transform(X_train)
     Xte = tfidf.transform(X_test)
 
-    # Full-dimensional baseline (no reduction).
+    # Baseline pleine dimension (sans réduction).
     base = LogisticRegression(max_iter=1000, random_state=config.RANDOM_STATE).fit(Xtr, y_train)
     baseline_f1 = compute_metrics(y_test, base.predict(Xte))["f1_macro"]
 
@@ -264,7 +242,7 @@ def experiment_pca() -> pd.DataFrame:
     cum_var = np.cumsum(svd_full.explained_variance_ratio_)
     plot_line(
         np.arange(1, max_components + 1), cum_var,
-        "TruncatedSVD cumulative explained variance", "components", "cumulative variance ratio",
+        "Variance expliquée cumulée (TruncatedSVD)", "composantes", "variance cumulée",
         config.FIGURES_DIR / "pca_explained_variance.png",
     )
 
@@ -286,21 +264,19 @@ def experiment_pca() -> pd.DataFrame:
     result.to_csv(config.TABLES_DIR / "pca_comparison.csv", index=False)
     plot_line(
         result["components"], result["f1_macro"],
-        "Macro-F1 vs SVD components (last point = full TF-IDF)", "components", "macro-F1",
+        "Macro-F1 vs composantes SVD (dernier point = TF-IDF complet)", "composantes", "macro-F1",
         config.FIGURES_DIR / "pca_f1.png",
     )
     return result
 
 
-# ---------------------------------------------------------------------------
-# Experiment: decision-tree post-pruning (cost-complexity)
-# ---------------------------------------------------------------------------
+# --- Expérience : post-élagage de l'arbre (cost-complexity) -----------------
 def experiment_pruning() -> pd.DataFrame:
-    """Trace cost-complexity (``ccp_alpha``) post-pruning of a decision tree.
+    """Trace le post-élagage cost-complexity (``ccp_alpha``) d'un arbre.
 
-    Larger ``ccp_alpha`` prunes more aggressively, shrinking the tree.  We track
-    train/test accuracy and tree size along the pruning path to expose the
-    classic over-fitting-vs-generalisation trade-off.
+    Un ``ccp_alpha`` plus grand élague plus agressivement et réduit l'arbre. On
+    suit l'accuracy train/test et la taille de l'arbre le long du chemin
+    d'élagage pour exposer le compromis surapprentissage / généralisation.
     """
     X_train, X_test, y_train, y_test, _ = prepare_data()
     tfidf = make_tfidf()
@@ -309,7 +285,7 @@ def experiment_pruning() -> pd.DataFrame:
 
     base_tree = DecisionTreeClassifier(random_state=config.RANDOM_STATE)
     alphas = base_tree.cost_complexity_pruning_path(Xtr, y_train).ccp_alphas
-    # Sample up to ~15 alphas across the path (drop the final, fully-collapsed one).
+    # Échantillonne ~15 alphas le long du chemin (retire le dernier, arbre réduit à la racine).
     alphas = np.unique(alphas[:-1])
     if len(alphas) > 15:
         alphas = alphas[:: max(1, len(alphas) // 15)]
@@ -329,15 +305,15 @@ def experiment_pruning() -> pd.DataFrame:
     result = pd.DataFrame(rows)
     result.to_csv(config.TABLES_DIR / "pruning_path.csv", index=False)
 
-    # Train vs test accuracy along the pruning path.
+    # Accuracy train vs test le long du chemin d'élagage.
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.plot(result["ccp_alpha"], result["train_accuracy"], marker="o", label="train")
     ax.plot(result["ccp_alpha"], result["test_accuracy"], marker="s", label="test")
-    ax.set_xlabel("ccp_alpha (pruning strength)")
+    ax.set_xlabel("ccp_alpha (force d'élagage)")
     ax.set_ylabel("accuracy")
-    ax.set_title("Decision-tree post-pruning (TF-IDF)")
+    ax.set_title("Post-élagage de l'arbre de décision (TF-IDF)")
     ax.legend()
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -346,16 +322,15 @@ def experiment_pruning() -> pd.DataFrame:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Experiment: early stopping in gradient boosting
-# ---------------------------------------------------------------------------
+# --- Expérience : early stopping du gradient boosting ----------------------
 def experiment_early_stopping() -> dict:
-    """Show early stopping halting gradient boosting before its 500-tree ceiling.
+    """Montre l'early stopping arrêtant le boosting avant son plafond de 500 arbres.
 
-    TF-IDF is first reduced with TruncatedSVD (dense, compact features that
-    gradient boosting handles efficiently).  ``n_iter_no_change`` then stops
-    training once validation performance plateaus.  We also plot the staged test
-    accuracy to visualise where additional trees stop helping.
+    Le TF-IDF est d'abord réduit par TruncatedSVD (features denses et compactes
+    que le boosting gère efficacement). ``n_iter_no_change`` arrête alors
+    l'entraînement dès que la performance de validation plafonne. On trace aussi
+    l'accuracy test par étape pour visualiser où les arbres supplémentaires
+    cessent d'aider.
     """
     X_train, X_test, y_train, y_test, _ = prepare_data()
     tfidf = make_tfidf()
@@ -365,12 +340,12 @@ def experiment_early_stopping() -> dict:
 
     gb = models.build_early_stopping_model().fit(Xtr, y_train)
 
-    # Staged test accuracy: one point per boosting iteration actually trained.
+    # Accuracy test par étape : un point par itération de boosting réellement entraînée.
     staged = [accuracy_score(y_test, p) for p in gb.staged_predict(Xte)]
     plot_line(
         np.arange(1, len(staged) + 1), staged,
-        f"Gradient boosting test accuracy (early-stopped at {gb.n_estimators_} trees)",
-        "boosting iterations", "test accuracy",
+        f"Accuracy test du gradient boosting (arrêté à {gb.n_estimators_} arbres)",
+        "itérations de boosting", "accuracy test",
         config.FIGURES_DIR / "early_stopping.png",
     )
 

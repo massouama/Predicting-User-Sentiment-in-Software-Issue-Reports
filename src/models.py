@@ -1,25 +1,21 @@
-"""Classifier definitions and their hyper-parameter search grids.
+"""Définitions des classifieurs et grilles d'hyper-paramètres.
 
-The brief asks for at least three classifiers plus tuning, pruning,
-regularisation and (for boosting) early stopping.  We cover all of it:
+Le sujet demande au moins trois classifieurs, plus réglage, élagage,
+régularisation et (pour le boosting) early stopping. On couvre tout :
 
-* **Naive Bayes** -- ``MultinomialNB`` for sparse non-negative features
-  (BoW / TF-IDF) and ``GaussianNB`` for dense embeddings, chosen automatically.
-* **Decision Tree** -- with both *pre-pruning* (``max_depth``,
-  ``min_samples_leaf``) and *post-pruning* (cost-complexity ``ccp_alpha``) in the
-  grid.
-* **Random Forest** -- bagged trees, a strong low-variance ensemble.
-* **AdaBoost** -- boosted stumps, the required boosting method.
-* **Logistic Regression** -- included specifically to demonstrate L2
-  **regularisation** (the inverse-strength ``C`` is tuned).
+* **Naive Bayes** : ``MultinomialNB`` pour les features creuses positives
+  (BoW / TF-IDF), ``GaussianNB`` pour les plongements denses, choisi
+  automatiquement.
+* **Decision Tree** : avec pré-élagage (``max_depth``, ``min_samples_leaf``) et
+  post-élagage (``ccp_alpha``) dans la grille.
+* **Random Forest** : ensemble d'arbres baggés, faible variance.
+* **AdaBoost** : boosting de souches, la méthode de boosting demandée.
+* **Logistic Regression** : démontre la régularisation L2 (``C`` réglé).
 
-Grid keys are prefixed with :data:`CLF_STEP` (``"clf"``) so they address the
-classifier step of the surrounding pipeline directly.  Grids are deliberately
-compact -- broad enough to show meaningful tuning, small enough to stay fast
-under 5-fold cross-validation.
-
-Early stopping is a property of a fitted estimator rather than a grid, so it is
-demonstrated separately by :func:`build_early_stopping_model`.
+Les clés des grilles sont préfixées par :data:`CLF_STEP` (``"clf"``) pour cibler
+l'étape classifieur du pipeline. Les grilles sont volontairement compactes :
+assez larges pour montrer un vrai réglage, assez petites pour rester rapides en
+validation croisée à 5 plis.
 """
 from __future__ import annotations
 
@@ -30,21 +26,21 @@ from sklearn.tree import DecisionTreeClassifier
 
 import config
 
-# Name of the classifier step inside every pipeline; grids reference it.
+# Nom de l'étape classifieur dans chaque pipeline ; les grilles le référencent.
 CLF_STEP = "clf"
 
 
 def _prefixed(grid: dict) -> dict:
-    """Prefix every grid key with ``"clf__"`` to target the pipeline step."""
+    """Préfixe chaque clé de grille par ``"clf__"`` pour cibler l'étape pipeline."""
     return {f"{CLF_STEP}__{k}": v for k, v in grid.items()}
 
 
 def _naive_bayes(dense: bool):
-    """Pick the Naive Bayes variant matching the feature space.
+    """Choisit la variante de Naive Bayes adaptée à l'espace de features.
 
-    ``MultinomialNB`` assumes non-negative counts and therefore only suits
-    BoW / TF-IDF; dense embeddings (which contain negative values) require the
-    Gaussian variant.
+    ``MultinomialNB`` suppose des comptes positifs (BoW / TF-IDF) ; les
+    plongements denses (qui ont des valeurs négatives) imposent la variante
+    gaussienne.
     """
     if dense:
         return GaussianNB(), _prefixed({"var_smoothing": [1e-9, 1e-8, 1e-7]})
@@ -52,14 +48,11 @@ def _naive_bayes(dense: bool):
 
 
 def build_classifiers(dense: bool = False) -> dict[str, dict]:
-    """Return the model-comparison suite as ``{name: {estimator, param_grid}}``.
+    """Renvoie la suite de modèles ``{nom: {estimator, param_grid}}``.
 
-    Parameters
-    ----------
-    dense:
-        ``True`` when the feature matrix is dense / may contain negatives
-        (Word2Vec, BERT, or any SVD/PCA output).  Switches Naive Bayes to its
-        Gaussian variant; every other classifier is feature-space agnostic.
+    ``dense=True`` quand la matrice de features est dense / peut contenir des
+    négatifs (Word2Vec ou sortie SVD) : bascule Naive Bayes en gaussien ; les
+    autres classifieurs sont indifférents à l'espace de features.
     """
     rs = config.RANDOM_STATE
     nb_estimator, nb_grid = _naive_bayes(dense)
@@ -73,17 +66,17 @@ def build_classifiers(dense: bool = False) -> dict[str, dict]:
             "estimator": DecisionTreeClassifier(random_state=rs),
             "param_grid": _prefixed(
                 {
-                    # pre-pruning ...
+                    # pré-élagage ...
                     "max_depth": [None, 10, 20, 30],
                     "min_samples_leaf": [1, 5, 10],
-                    # ... and post-pruning (cost-complexity)
+                    # ... et post-élagage (cost-complexity)
                     "ccp_alpha": [0.0, 1e-3, 1e-2],
                 }
             ),
         },
         "RandomForest": {
-            # n_jobs left at 1: GridSearchCV parallelises folds, so keeping the
-            # forest single-threaded avoids nested over-subscription of cores.
+            # n_jobs reste à 1 : GridSearchCV parallélise déjà les plis, donc
+            # garder la forêt mono-thread évite la sur-souscription des cœurs.
             "estimator": RandomForestClassifier(random_state=rs),
             "param_grid": _prefixed(
                 {
@@ -105,24 +98,24 @@ def build_classifiers(dense: bool = False) -> dict[str, dict]:
         },
         "LogisticRegression": {
             "estimator": LogisticRegression(max_iter=1000, random_state=rs),
-            # Tuning C demonstrates L2 regularisation strength selection.
+            # Régler C illustre le choix de la force de régularisation L2.
             "param_grid": _prefixed({"C": [0.1, 1.0, 10.0]}),
         },
     }
 
 
 def build_early_stopping_model(validation_fraction: float = 0.1):
-    """Return a gradient-boosting classifier configured with early stopping.
+    """Renvoie un gradient boosting configuré avec early stopping.
 
-    ``n_iter_no_change`` makes :class:`GradientBoostingClassifier` monitor a
-    held-out validation slice and halt once the validation loss stops improving
-    -- automatic early stopping that prevents over-fitting and wasted trees.
-    Used by the dedicated early-stopping experiment.
+    ``n_iter_no_change`` fait surveiller à :class:`GradientBoostingClassifier`
+    une part de validation et arrête l'entraînement dès que la perte de
+    validation cesse de s'améliorer — early stopping automatique qui évite le
+    surapprentissage et les arbres inutiles.
     """
     return GradientBoostingClassifier(
-        n_estimators=500,                 # generous ceiling ...
+        n_estimators=500,                 # plafond généreux ...
         learning_rate=0.1,
         validation_fraction=validation_fraction,
-        n_iter_no_change=10,              # ... stop after 10 stagnant rounds
+        n_iter_no_change=10,              # ... arrêt après 10 tours sans progrès
         random_state=config.RANDOM_STATE,
     )

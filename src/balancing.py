@@ -1,20 +1,19 @@
-"""Class-imbalance handling for the (deliberately skewed) issue corpus.
+"""Gestion du déséquilibre de classes du corpus.
 
-Issue trackers are dominated by complaints, so the ``negative`` class greatly
-outnumbers ``positive``.  Left untreated, classifiers optimise overall accuracy
-by neglecting the minority classes.  We compare two standard remedies:
+Les avis sont fortement déséquilibrés (les positifs dominent, le neutre est
+minuscule). Sans traitement, les classifieurs optimisent l'accuracy globale en
+négligeant les classes minoritaires. On compare deux remèdes standards :
 
-* **SMOTE** (Synthetic Minority Over-sampling TEchnique) -- synthesises new
-  minority examples by interpolating between neighbouring minority points,
-  enriching the decision boundary without duplicating rows.
-* **Random under-sampling** -- discards majority examples until the classes
-  match; cheap and fast, but throws away data.
+* **SMOTE** : synthétise de nouveaux exemples minoritaires en interpolant entre
+  points voisins, enrichissant la frontière de décision sans dupliquer de lignes.
+* **Sous-échantillonnage aléatoire** : retire des exemples majoritaires jusqu'à
+  équilibrer les classes ; rapide, mais jette de la donnée.
 
-Crucially, resampling must run **only on the training folds**.  We therefore
-return :mod:`imblearn` *samplers* that slot into an
-:class:`imblearn.pipeline.Pipeline`, where they are bypassed automatically at
-predict time -- the single robust way to avoid leaking synthetic samples into
-evaluation.
+Le rééchantillonnage ne doit agir **que sur les plis d'entraînement**. On
+renvoie donc des *samplers* :mod:`imblearn` qui s'insèrent dans un
+:class:`imblearn.pipeline.Pipeline`, où ils sont automatiquement ignorés à la
+prédiction — la seule façon robuste d'éviter de fuiter des exemples synthétiques
+dans l'évaluation.
 """
 from __future__ import annotations
 
@@ -26,21 +25,22 @@ import config
 
 
 def make_smote(k_neighbors: int = 5) -> SMOTE:
-    """Return a SMOTE over-sampler that balances every class to the majority.
+    """Sur-échantillonneur SMOTE équilibrant chaque classe sur la majoritaire.
 
-    ``k_neighbors`` controls how many minority neighbours each synthetic point
-    is interpolated from; it must stay below the smallest class size.
+    ``k_neighbors`` est le nombre de voisins minoritaires servant à interpoler
+    chaque point synthétique ; il doit rester sous la taille de la plus petite
+    classe.
     """
     return SMOTE(random_state=config.RANDOM_STATE, k_neighbors=k_neighbors)
 
 
 def make_undersampler() -> RandomUnderSampler:
-    """Return a random under-sampler that trims every class to the smallest."""
+    """Sous-échantillonneur aléatoire ramenant chaque classe à la plus petite."""
     return RandomUnderSampler(random_state=config.RANDOM_STATE)
 
 
-# Registry consumed by the imbalance experiment.  ``None`` is the untreated
-# baseline used for comparison.
+# Registre consommé par l'expérience sur le déséquilibre. ``None`` est la
+# baseline non traitée servant de comparaison.
 SAMPLERS: dict[str, object] = {
     "none": None,
     "SMOTE": make_smote(),
@@ -49,10 +49,6 @@ SAMPLERS: dict[str, object] = {
 
 
 def class_distribution(labels) -> pd.Series:
-    """Return per-class counts ordered by :data:`config.CLASS_NAMES`.
-
-    A tiny helper used by the EDA script and the imbalance report so the
-    distribution is always presented in the same, readable order.
-    """
+    """Renvoie les effectifs par classe, ordonnés selon :data:`config.CLASS_NAMES`."""
     counts = pd.Series(labels).value_counts()
     return counts.reindex(config.CLASS_NAMES).fillna(0).astype(int)

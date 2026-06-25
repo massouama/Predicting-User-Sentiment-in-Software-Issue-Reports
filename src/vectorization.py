@@ -1,23 +1,16 @@
-"""Text vectorisation strategies compared in this project.
+"""Stratégies de vectorisation du texte comparées dans le projet.
 
-The four representations named in the brief are provided, covering the spectrum
-from sparse count statistics to dense embeddings:
+Quatre représentations, du comptage creux aux plongements denses :
 
-==================  ============================================  ===========
-Vectoriser          Idea                                          Output
-==================  ============================================  ===========
-Bag-of-Words        raw n-gram counts                             sparse, >=0
-TF-IDF              counts x inverse document frequency            sparse, >=0
-Word2Vec            mean of embeddings (trained on our corpus)     dense, +/-
-Word2Vec-pretrained mean of pre-trained Google-News vectors        dense, +/-
-BERT                mean-pooled contextual embeddings (optional)   dense, +/-
-==================  ============================================  ===========
+    BoW                   comptes bruts de n-grammes            creux, >= 0
+    TF-IDF                comptes pondérés par la rareté         creux, >= 0
+    Word2Vec              moyenne de plongements (appris ici)    dense, +/-
+    Word2Vec pré-entraîné moyenne des vecteurs Google News       dense, +/-
 
-Each strategy is exposed through a ``make_*`` factory returning a fresh,
-scikit-learn-compatible estimator, so callers can freely compose them into
-pipelines.  The sparse, non-negative output of BoW/TF-IDF is what makes them
-compatible with ``MultinomialNB``; the dense embedding outputs are not, which is
-handled centrally in :mod:`src.models`.
+Chaque stratégie est exposée via une fabrique ``make_*`` qui renvoie un
+estimateur compatible scikit-learn. La sortie creuse et positive de BoW/TF-IDF
+les rend compatibles avec ``MultinomialNB`` ; les plongements denses (qui ont
+des valeurs négatives) non, ce qui est géré dans :mod:`src.models`.
 """
 from __future__ import annotations
 
@@ -28,14 +21,12 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 import config
 
 
-# ---------------------------------------------------------------------------
-# Sparse, count-based vectorisers (scikit-learn built-ins)
-# ---------------------------------------------------------------------------
+# --- Vectoriseurs creux par comptage (intégrés à scikit-learn) -------------
 def make_bow() -> CountVectorizer:
-    """Bag-of-Words: raw n-gram occurrence counts.
+    """Bag-of-Words : comptes bruts d'occurrences de n-grammes.
 
-    The simplest representation -- a fast, strong baseline that is also the most
-    natural input for Multinomial Naive Bayes.
+    La représentation la plus simple ; une baseline rapide et solide, et
+    l'entrée naturelle du Naive Bayes multinomial.
     """
     return CountVectorizer(
         max_features=config.MAX_FEATURES,
@@ -45,35 +36,26 @@ def make_bow() -> CountVectorizer:
 
 
 def make_tfidf() -> TfidfVectorizer:
-    """TF-IDF: counts down-weighted by how common a term is across documents.
+    """TF-IDF : comptes atténués selon la fréquence d'un terme dans le corpus.
 
-    Rare, discriminative words are emphasised over ubiquitous ones, which
-    usually beats plain BoW for short, noisy texts such as issue titles.
+    Les mots rares et discriminants sont privilégiés, ce qui bat généralement le
+    simple BoW sur des textes courts et bruités.
     """
     return TfidfVectorizer(
         max_features=config.MAX_FEATURES,
         min_df=config.MIN_DF,
         ngram_range=config.NGRAM_RANGE,
-        sublinear_tf=True,   # 1 + log(tf): dampens the effect of repeated terms
+        sublinear_tf=True,   # 1 + log(tf) : atténue les termes répétés
     )
 
 
-# ---------------------------------------------------------------------------
-# Word2Vec embedding vectoriser
-# ---------------------------------------------------------------------------
+# --- Vectoriseur Word2Vec (plongements appris sur le corpus) ---------------
 class Word2VecVectorizer(BaseEstimator, TransformerMixin):
-    """Average-pooled Word2Vec document embeddings.
+    """Plongements de document Word2Vec moyennés.
 
-    A Word2Vec model is trained on the *training* corpus during ``fit`` (so no
-    test information leaks in), then each document is represented by the mean of
-    its in-vocabulary word vectors -- a simple, robust sentence embedding.
-    Out-of-vocabulary or empty documents map to the zero vector.
-
-    Training embeddings on our own corpus -- rather than loading multi-gigabyte
-    pre-trained vectors that cannot be fetched in this sandbox -- keeps the
-    project self-contained while still demonstrating the embedding approach.
-
-    Parameters mirror the ``config`` defaults and are exposed for tuning.
+    Un modèle Word2Vec est entraîné sur le corpus d'entraînement dans ``fit``
+    (aucune fuite du test), puis chaque document est représenté par la moyenne
+    des vecteurs de ses mots connus. Les documents vides donnent le vecteur nul.
     """
 
     def __init__(
@@ -92,12 +74,12 @@ class Word2VecVectorizer(BaseEstimator, TransformerMixin):
 
     @staticmethod
     def _tokenize(documents):
-        """Split already-cleaned strings into token lists for gensim."""
+        """Découpe les chaînes déjà nettoyées en listes de tokens pour gensim."""
         return [doc.split() for doc in documents]
 
-    def fit(self, X, y=None):  # noqa: N803 - sklearn naming convention
-        """Train Word2Vec on the tokenised training documents."""
-        from gensim.models import Word2Vec  # local import keeps gensim optional
+    def fit(self, X, y=None):  # noqa: N803
+        """Entraîne Word2Vec sur les documents d'entraînement tokenisés."""
+        from gensim.models import Word2Vec  # import local : gensim reste optionnel
 
         self.model_ = Word2Vec(
             sentences=self._tokenize(X),
@@ -106,12 +88,12 @@ class Word2VecVectorizer(BaseEstimator, TransformerMixin):
             min_count=self.min_count,
             epochs=self.epochs,
             seed=self.random_state,
-            workers=1,  # single worker -> deterministic, reproducible vectors
+            workers=1,  # un seul worker -> vecteurs déterministes et reproductibles
         )
         return self
 
-    def transform(self, X):  # noqa: N803 - sklearn naming convention
-        """Mean-pool word vectors into one dense vector per document."""
+    def transform(self, X):  # noqa: N803
+        """Moyenne les vecteurs de mots en un vecteur dense par document."""
         wv = self.model_.wv
         out = np.zeros((len(X), self.vector_size), dtype=np.float32)
         for i, doc in enumerate(self._tokenize(X)):
@@ -122,32 +104,25 @@ class Word2VecVectorizer(BaseEstimator, TransformerMixin):
 
 
 def make_word2vec() -> Word2VecVectorizer:
-    """Factory for :class:`Word2VecVectorizer` using the configured defaults."""
+    """Fabrique de :class:`Word2VecVectorizer` avec les réglages par défaut."""
     return Word2VecVectorizer()
 
 
-# ---------------------------------------------------------------------------
-# Pre-trained Word2Vec vectoriser (Google-News vectors via gensim-data)
-# ---------------------------------------------------------------------------
-# Module-level cache of loaded pre-trained vectors, keyed by model name.  The
-# vectors live here, NOT on the transformer instance, so the fitted transformer
-# stays tiny and the joblib pipeline cache never pickles them.
+# --- Vectoriseur Word2Vec pré-entraîné (vecteurs Google News via gensim) ---
+# Cache des vecteurs pré-entraînés au niveau module. Les vecteurs vivent ici,
+# PAS sur l'instance, pour que le transformateur ajusté reste léger et ne soit
+# jamais sérialisé dans le cache joblib du pipeline.
 _PRETRAINED_CACHE: dict = {}
 
-# The brief asks specifically for *pre-trained Word2Vec*; we use the canonical
-# Google-News 300-d vectors.  The full model holds 3 M words (~3.6 GB); we load
-# only the most frequent ``_PRETRAINED_LIMIT`` words, which keeps memory modest
-# (~0.6 GB) -- ample coverage since rarer words never appear in short reviews.
+# Vecteurs Google News 300-d. Le modèle complet pèse ~3,6 Go (3 M de mots) ; on
+# ne charge que les ``_PRETRAINED_LIMIT`` mots les plus fréquents (~0,6 Go),
+# couverture amplement suffisante pour des avis courts.
 _PRETRAINED_MODEL = "word2vec-google-news-300"
 _PRETRAINED_LIMIT = 500_000
 
 
 def pretrained_available(model_name: str = _PRETRAINED_MODEL) -> bool:
-    """Return ``True`` if the pre-trained Word2Vec vectors are loadable.
-
-    Loads via gensim-data (hosted on GitHub).  The result is cached, so the first
-    call may download / load the model and later calls are instant.
-    """
+    """Renvoie ``True`` si les vecteurs Word2Vec pré-entraînés sont chargeables."""
     try:
         _load_pretrained(model_name)
         return True
@@ -156,11 +131,7 @@ def pretrained_available(model_name: str = _PRETRAINED_MODEL) -> bool:
 
 
 def _load_pretrained(model_name: str = _PRETRAINED_MODEL):
-    """Load (and cache) the pre-trained Word2Vec ``KeyedVectors``.
-
-    ``return_path=True`` downloads the model once and yields the file path; we
-    then load it with a vocabulary ``limit`` to cap memory.
-    """
+    """Charge (et met en cache) les ``KeyedVectors`` pré-entraînés."""
     if model_name not in _PRETRAINED_CACHE:
         import gensim.downloader as api
         from gensim.models import KeyedVectors
@@ -173,29 +144,25 @@ def _load_pretrained(model_name: str = _PRETRAINED_MODEL):
 
 
 class PretrainedEmbeddingVectorizer(BaseEstimator, TransformerMixin):
-    """Average-pooled **pre-trained Word2Vec** document embeddings.
+    """Plongements de document moyennés à partir de **Word2Vec pré-entraîné**.
 
-    Unlike :class:`Word2VecVectorizer` (which trains on our own corpus), the
-    embeddings here are the canonical **Google-News word2vec** vectors, trained on
-    100 billion words and merely loaded -- ``fit`` learns nothing.  Each document
-    becomes the mean of its in-vocabulary word vectors; out-of-vocabulary tokens
-    are skipped and empty documents map to the zero vector.
-
-    This is exactly the *"pre-trained Word2Vec"* representation requested by the
-    brief, and the natural counterpart to the in-domain Word2Vec model.
+    Contrairement à :class:`Word2VecVectorizer` (entraîné sur notre corpus), les
+    plongements sont ici les vecteurs Google News, simplement chargés : ``fit``
+    n'apprend rien. Chaque document devient la moyenne des vecteurs de ses mots
+    connus ; les documents vides donnent le vecteur nul.
     """
 
     def __init__(self, model_name: str = _PRETRAINED_MODEL):
         self.model_name = model_name
 
-    def fit(self, X, y=None):  # noqa: N803 - sklearn naming convention
-        """Ensure the pre-trained vectors are loaded; record their dimension."""
+    def fit(self, X, y=None):  # noqa: N803
+        """Charge les vecteurs pré-entraînés et mémorise leur dimension."""
         kv = _load_pretrained(self.model_name)
         self.vector_size_ = kv.vector_size
         return self
 
-    def transform(self, X):  # noqa: N803 - sklearn naming convention
-        """Mean-pool pre-trained word vectors into one dense vector per document."""
+    def transform(self, X):  # noqa: N803
+        """Moyenne les vecteurs pré-entraînés en un vecteur dense par document."""
         kv = _load_pretrained(self.model_name)
         out = np.zeros((len(X), kv.vector_size), dtype=np.float32)
         for i, doc in enumerate(X):
@@ -206,90 +173,15 @@ class PretrainedEmbeddingVectorizer(BaseEstimator, TransformerMixin):
 
 
 def make_pretrained() -> PretrainedEmbeddingVectorizer:
-    """Factory for :class:`PretrainedEmbeddingVectorizer` (pre-trained Word2Vec)."""
+    """Fabrique de :class:`PretrainedEmbeddingVectorizer` (Word2Vec pré-entraîné)."""
     return PretrainedEmbeddingVectorizer()
 
 
-# ---------------------------------------------------------------------------
-# BERT embedding vectoriser (optional)
-# ---------------------------------------------------------------------------
-def bert_available() -> bool:
-    """Return ``True`` only if both ``transformers`` and ``torch`` import."""
-    try:
-        import torch  # noqa: F401
-        import transformers  # noqa: F401
-
-        return True
-    except Exception:
-        return False
-
-
-class BertVectorizer(BaseEstimator, TransformerMixin):
-    """Mean-pooled contextual embeddings from a pre-trained BERT model.
-
-    This is a complete, documented implementation of the BERT vectorisation
-    branch required by the brief.  It is *optional*: ``transformers`` + ``torch``
-    plus the model weights must be available locally.  In a network-restricted
-    environment where the model hub is unreachable the weights cannot be
-    downloaded, so the experiments fall back to BoW / TF-IDF / Word2Vec; the
-    code path itself is nonetheless ready to run wherever BERT is installed.
-
-    Each document is encoded and represented by the mean of its last-hidden-state
-    token embeddings (attention-mask aware), a standard sentence-embedding
-    recipe that is more robust than the raw ``[CLS]`` vector.
-    """
-
-    def __init__(self, model_name: str = "distilbert-base-uncased", batch_size: int = 32, max_length: int = 64):
-        self.model_name = model_name
-        self.batch_size = batch_size
-        self.max_length = max_length
-
-    def fit(self, X, y=None):  # noqa: N803 - sklearn naming convention
-        """Load the tokenizer and frozen model (no training takes place)."""
-        if not bert_available():
-            raise ImportError(
-                "BertVectorizer requires the 'transformers' and 'torch' packages. "
-                "Install them (and ensure the model weights are reachable) to use this vectoriser."
-            )
-        import torch
-        from transformers import AutoModel, AutoTokenizer
-
-        self._torch = torch
-        self.tokenizer_ = AutoTokenizer.from_pretrained(self.model_name)
-        self.model_ = AutoModel.from_pretrained(self.model_name)
-        self.model_.eval()  # inference mode: embeddings only, weights frozen
-        return self
-
-    def transform(self, X):  # noqa: N803 - sklearn naming convention
-        """Encode documents in batches into mean-pooled embedding vectors."""
-        torch = self._torch
-        embeddings = []
-        with torch.no_grad():
-            for start in range(0, len(X), self.batch_size):
-                batch = list(X[start : start + self.batch_size])
-                enc = self.tokenizer_(
-                    batch, padding=True, truncation=True,
-                    max_length=self.max_length, return_tensors="pt",
-                )
-                hidden = self.model_(**enc).last_hidden_state          # (B, T, H)
-                mask = enc["attention_mask"].unsqueeze(-1).float()      # (B, T, 1)
-                pooled = (hidden * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
-                embeddings.append(pooled.cpu().numpy())
-        return np.vstack(embeddings)
-
-
-def make_bert() -> BertVectorizer:
-    """Factory for :class:`BertVectorizer` (requires optional dependencies)."""
-    return BertVectorizer()
-
-
-# Registry consumed by the experiment runner.  ``dense`` flags whether the
-# output contains negative values (and is therefore incompatible with
-# MultinomialNB / direct PCA-on-counts), which downstream code keys off.
+# Registre consommé par l'orchestrateur. ``dense`` indique si la sortie peut
+# contenir des valeurs négatives (donc incompatible avec MultinomialNB).
 VECTORIZERS: dict[str, dict] = {
     "BoW": {"factory": make_bow, "dense": False},
     "TF-IDF": {"factory": make_tfidf, "dense": False},
-    "Word2Vec": {"factory": make_word2vec, "dense": True},          # trained on our corpus
-    "Word2Vec-pretrained": {"factory": make_pretrained, "dense": True},  # Google-News
-    "BERT": {"factory": make_bert, "dense": True},
+    "Word2Vec": {"factory": make_word2vec, "dense": True},          # appris sur notre corpus
+    "Word2Vec-pretrained": {"factory": make_pretrained, "dense": True},  # Google News
 }
